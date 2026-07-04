@@ -54,6 +54,13 @@ button {
   user-select: none;
 }
 
+/* Tailwind v4 preflight sets buttons to cursor:default — restore pointer
+   affordance on all enabled interactive elements */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
 .screen-layer {
   /* Keep bottom actions above the iOS home indicator */
   padding-bottom: env(safe-area-inset-bottom);
