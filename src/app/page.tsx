@@ -1,65 +1,305 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useRef, useState } from "react";
+import { inspector, properties, type Property } from "./data";
+import {
+  getInspectionConfig,
+  getZonesForProperty,
+} from "@/config/inspectionTypes";
+import type {
+  Finding,
+  FindingDraft,
+  InspectionSession,
+  InspectionZone,
+  ZoneStatus,
+} from "@/types/inspection";
+import HomeScreen from "./components/HomeScreen";
+import SelectPropertyScreen from "./components/SelectPropertyScreen";
+import SelectTypeScreen from "./components/SelectTypeScreen";
+import InspectionStartScreen from "./components/InspectionStartScreen";
+import InspectionScreen from "./components/InspectionScreen";
+import SummaryScreen from "./components/SummaryScreen";
+import CompleteScreen from "./components/CompleteScreen";
+
+// ---- Navigation ------------------------------------------------------------
+
+type Screen =
+  | { name: "home" }
+  | { name: "selectProperty" }
+  | { name: "selectType"; propertyId: string }
+  | { name: "starting" }
+  | { name: "inspection" }
+  | { name: "summary" }
+  | { name: "complete" };
+
+type Anim =
+  | "in-fwd"
+  | "out-fwd"
+  | "in-back"
+  | "out-back"
+  | "in-fade"
+  | "out-fade"
+  | null;
+
+interface Layer {
+  key: number;
+  screen: Screen;
+  anim: Anim;
+}
+
+const TRANSITION_MS = 340;
+
+// ---- App -------------------------------------------------------------------
+
+export default function App() {
+  const [layers, setLayers] = useState<Layer[]>([
+    { key: 0, screen: { name: "home" }, anim: null },
+  ]);
+  const nextKey = useRef(1);
+  const animating = useRef(false);
+
+  // Inspection session (one active inspection at a time, React state only)
+  const [session, setSession] = useState<InspectionSession | null>(null);
+  const [zoneStatuses, setZoneStatuses] = useState<ZoneStatus[]>([]);
+  const [zoneIndex, setZoneIndex] = useState(0);
+  const [findings, setFindings] = useState<Finding[]>([]);
+  const inspectionSeq = useRef(0);
+
+  // Duration tracking
+  const [completedAt, setCompletedAt] = useState<number | null>(null);
+  const [durationSeconds, setDurationSeconds] = useState<number | null>(null);
+  const [zoneStartedAt, setZoneStartedAt] = useState<number | null>(null);
+  const [zoneDurations, setZoneDurations] = useState<number[]>([]);
+  const [summaryElapsedSec, setSummaryElapsedSec] = useState<number | null>(
+    null
+  );
+
+  const nowMs = () => new Date().getTime();
+
+  const navigate = (screen: Screen, dir: "fwd" | "back" | "fade") => {
+    if (animating.current) return;
+    animating.current = true;
+    setLayers((prev) => {
+      const current = prev[prev.length - 1];
+      return [
+        {
+          ...current,
+          anim:
+            dir === "fwd" ? "out-fwd" : dir === "back" ? "out-back" : "out-fade",
+        },
+        {
+          key: nextKey.current++,
+          screen,
+          anim: dir === "fwd" ? "in-fwd" : dir === "back" ? "in-back" : "in-fade",
+        },
+      ];
+    });
+    window.setTimeout(() => {
+      setLayers((prev) => [{ ...prev[prev.length - 1], anim: null }]);
+      animating.current = false;
+    }, TRANSITION_MS);
+  };
+
+  const getProperty = (id: string): Property =>
+    properties.find((p) => p.id === id) ?? properties[0];
+
+  /** Zones come from the session's inspection type config + property features. */
+  const zonesForSession = (s: InspectionSession): InspectionZone[] =>
+    getZonesForProperty(
+      getInspectionConfig(s.inspectionType),
+      getProperty(s.propertyId).features
+    );
+
+  /** Close the timing of the current zone (first completion or finding wins). */
+  const closeZoneTiming = () => {
+    if (zoneStartedAt == null) return;
+    const secs = Math.max(1, Math.round((nowMs() - zoneStartedAt) / 1000));
+    setZoneDurations((prev) =>
+      prev.map((d, i) => (i === zoneIndex && d === 0 ? secs : d))
+    );
+  };
+
+  // ---- Flow actions --------------------------------------------------------
+
+  const startInspection = (property: Property, inspectionType: string) => {
+    inspectionSeq.current += 1;
+    const start = nowMs();
+    const newSession: InspectionSession = {
+      inspectionId: `insp-${property.id}-${inspectionSeq.current}`,
+      propertyId: property.id,
+      propertyName: property.name,
+      inspectionType,
+      inspector,
+      startedAt: start,
+      status: "In Progress",
+    };
+    setSession(newSession);
+    setZoneStatuses(zonesForSession(newSession).map(() => "pending"));
+    setZoneIndex(0);
+    setFindings([]);
+    setCompletedAt(null);
+    setDurationSeconds(null);
+    setSummaryElapsedSec(null);
+    setZoneStartedAt(start);
+    setZoneDurations(zonesForSession(newSession).map(() => 0));
+    // Short branded transition screen, then fade into the first zone
+    navigate({ name: "starting" }, "fwd");
+    window.setTimeout(() => {
+      navigate({ name: "inspection" }, "fade");
+    }, 1100);
+  };
+
+  const confirmZone = () => {
+    closeZoneTiming();
+    setZoneStatuses((prev) =>
+      prev.map((s, i) => (i === zoneIndex ? "confirmed" : s))
+    );
+  };
+
+  const saveFinding = (draft: FindingDraft) => {
+    if (!session) return;
+    closeZoneTiming();
+    const zone = zonesForSession(session)[zoneIndex];
+    setZoneStatuses((prev) =>
+      prev.map((s, i) => (i === zoneIndex ? "issue" : s))
+    );
+    setFindings((prev) => [
+      ...prev,
+      {
+        ...draft,
+        inspectionId: session.inspectionId,
+        propertyId: session.propertyId,
+        zone: zone.id,
+        timestamp: new Date().toISOString(),
+      },
+    ]);
+  };
+
+  // ---- Screen rendering ----------------------------------------------------
+
+  const renderScreen = (screen: Screen) => {
+    switch (screen.name) {
+      case "home":
+        return (
+          <HomeScreen
+            session={session?.status === "In Progress" ? session : null}
+            onResume={() => navigate({ name: "inspection" }, "fwd")}
+            onStartNew={() => navigate({ name: "selectProperty" }, "fwd")}
+          />
+        );
+      case "selectProperty":
+        return (
+          <SelectPropertyScreen
+            onBack={() => navigate({ name: "home" }, "back")}
+            onSelect={(property) =>
+              navigate(
+                { name: "selectType", propertyId: property.id },
+                "fwd"
+              )
+            }
+          />
+        );
+      case "selectType": {
+        const property = getProperty(screen.propertyId);
+        return (
+          <SelectTypeScreen
+            property={property}
+            onBack={() => navigate({ name: "selectProperty" }, "back")}
+            onStart={(inspectionType) =>
+              startInspection(property, inspectionType)
+            }
+          />
+        );
+      }
+      case "starting": {
+        if (!session) return null;
+        return (
+          <InspectionStartScreen
+            property={getProperty(session.propertyId)}
+            inspectionType={session.inspectionType}
+            startedAt={session.startedAt}
+          />
+        );
+      }
+      case "inspection": {
+        if (!session) return null;
+        const property = getProperty(session.propertyId);
+        return (
+          <InspectionScreen
+            property={property}
+            inspectionType={session.inspectionType}
+            zones={zonesForSession(session)}
+            zoneIndex={zoneIndex}
+            zoneStatuses={zoneStatuses}
+            onConfirmZone={confirmZone}
+            onSaveFinding={saveFinding}
+            onNextZone={() => {
+              setZoneIndex((i) => i + 1);
+              setZoneStartedAt(nowMs());
+            }}
+            onFinish={() => {
+              setSummaryElapsedSec(
+                Math.round((nowMs() - session.startedAt) / 1000)
+              );
+              navigate({ name: "summary" }, "fwd");
+            }}
+            onBack={() => navigate({ name: "home" }, "back")}
+          />
+        );
+      }
+      case "summary": {
+        if (!session) return null;
+        return (
+          <SummaryScreen
+            property={getProperty(session.propertyId)}
+            zones={zonesForSession(session)}
+            zoneStatuses={zoneStatuses}
+            findings={findings}
+            elapsedSeconds={summaryElapsedSec}
+            zoneDurations={zoneDurations}
+            onBack={() => navigate({ name: "inspection" }, "back")}
+            onComplete={() => {
+              const end = nowMs();
+              setCompletedAt(end);
+              setDurationSeconds(Math.round((end - session.startedAt) / 1000));
+              setSession({ ...session, status: "Completed" });
+              navigate({ name: "complete" }, "fwd");
+            }}
+          />
+        );
+      }
+      case "complete": {
+        if (!session) return null;
+        return (
+          <CompleteScreen
+            property={getProperty(session.propertyId)}
+            zoneStatuses={zoneStatuses}
+            findings={findings}
+            durationSeconds={durationSeconds}
+            completedAt={completedAt}
+            onDone={() => {
+              setSession(null);
+              navigate({ name: "home" }, "fwd");
+            }}
+          />
+        );
+      }
+    }
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <div className="flex flex-1 justify-center">
+      {/* Phone-width column, centered on desktop */}
+      <div className="relative h-dvh w-full max-w-md overflow-hidden bg-beige">
+        {layers.map((layer) => (
+          <div
+            key={layer.key}
+            className={`screen-layer ${layer.anim ? `anim-${layer.anim}` : ""}`}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+            {renderScreen(layer.screen)}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
