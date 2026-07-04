@@ -49,14 +49,6 @@ interface Layer {
 
 const TRANSITION_MS = 340;
 
-/**
- * TEMP debug flag: shows a tap counter badge to verify touch events reach
- * React on real devices. If the badge stays at 0 on a phone, JS/hydration
- * failed (check Safari console) — that's the bug, not CSS/overlays.
- * Set to false (or remove) once mobile touch is verified.
- */
-const DEBUG_TOUCH = true;
-
 // ---- App -------------------------------------------------------------------
 
 export default function App() {
@@ -81,9 +73,6 @@ export default function App() {
   const [summaryElapsedSec, setSummaryElapsedSec] = useState<number | null>(
     null
   );
-
-  // TEMP: debug tap counter (see DEBUG_TOUCH above)
-  const [tapCount, setTapCount] = useState(0);
 
   const nowMs = () => new Date().getTime();
 
@@ -301,12 +290,7 @@ export default function App() {
   return (
     <div className="flex flex-1 justify-center">
       {/* Phone-width column, centered on desktop */}
-      <div
-        className="relative h-dvh w-full max-w-md overflow-hidden bg-beige"
-        onPointerDownCapture={
-          DEBUG_TOUCH ? () => setTapCount((c) => c + 1) : undefined
-        }
-      >
+      <div className="relative h-dvh w-full max-w-md overflow-hidden bg-beige">
         {layers.map((layer) => (
           <div
             key={layer.key}
@@ -315,11 +299,6 @@ export default function App() {
             {renderScreen(layer.screen)}
           </div>
         ))}
-        {DEBUG_TOUCH && (
-          <div className="pointer-events-none fixed right-2 top-2 z-[100] rounded-full bg-navy/80 px-3 py-1.5 text-xs font-semibold text-white shadow">
-            {tapCount === 0 ? "Tap anywhere to test" : `Taps: ${tapCount}`}
-          </div>
-        )}
       </div>
     </div>
   );
