@@ -136,7 +136,7 @@ export default function SummaryScreen({
           </div>
           <div>
             <p className="text-2xl font-semibold">{zones.length}</p>
-            <p className="text-xs text-white/60">zones</p>
+            <p className="text-xs text-white/60">areas</p>
           </div>
           {elapsedSeconds != null && (
             <div>
@@ -149,11 +149,11 @@ export default function SummaryScreen({
         </div>
       </section>
 
-      {/* Zones review */}
+      {/* Areas review */}
       <main className="mx-5 mt-4 flex flex-1 flex-col gap-3 pb-2">
         <section className="rounded-3xl bg-white px-6 py-5 shadow-sm">
           <p className="text-xs font-medium uppercase tracking-wider text-navy/50">
-            Zones
+            Areas
           </p>
           <ul className="mt-3 flex flex-col">
             {zones.map((zone, i) => {

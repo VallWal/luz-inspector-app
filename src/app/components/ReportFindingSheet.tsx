@@ -166,7 +166,7 @@ export default function ReportFindingSheet({ zone, onClose, onSave }: Props) {
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-navy/15" />
         <h3 className="text-xl font-semibold text-navy">Report Finding</h3>
         <p className="mt-1 text-xs font-medium uppercase tracking-wider text-navy/50">
-          Current Zone
+          Current Area
         </p>
         <p className="text-base font-semibold text-navy">{zone.title}</p>
 

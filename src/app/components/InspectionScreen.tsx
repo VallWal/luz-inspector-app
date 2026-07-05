@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Property } from "../data";
 import type {
   ChecklistItem,
+  Finding,
   FindingDraft,
   InspectionZone,
   ZoneStatus,
@@ -63,9 +64,13 @@ interface Props {
   zoneStatuses: ZoneStatus[];
   /** Findings recorded in the current zone (a zone can have several). */
   zoneFindingCount: number;
+  /** All findings of the session — used to color the area progress dots. */
+  findings: Finding[];
   onConfirmZone: () => void;
   onSaveFinding: (draft: FindingDraft) => void;
   onNextZone: () => void;
+  /** Jump to any area via the progress dots (state is preserved). */
+  onGoToZone: (index: number) => void;
   onFinish: () => void;
   onBack: () => void;
 }
@@ -77,9 +82,11 @@ export default function InspectionScreen({
   zoneIndex,
   zoneStatuses,
   zoneFindingCount,
+  findings,
   onConfirmZone,
   onSaveFinding,
   onNextZone,
+  onGoToZone,
   onFinish,
   onBack,
 }: Props) {
@@ -107,6 +114,14 @@ export default function InspectionScreen({
   const completedCount = zoneStatuses.filter((s) => s !== "pending").length;
   const progressPct = (completedCount / zones.length) * 100;
   const isLastZone = zoneIndex === zones.length - 1;
+
+  /** Worst finding severity in an area: immediate > monitor > none. */
+  const worstSeverity = (zoneId: string): "immediate" | "monitor" | null => {
+    const zf = findings.filter((f) => f.zone === zoneId);
+    if (zf.some((f) => f.severity === "immediate")) return "immediate";
+    if (zf.some((f) => f.severity === "monitor")) return "monitor";
+    return null;
+  };
 
   const scheduleAdvance = () => {
     setAdvancing(true);
@@ -162,7 +177,7 @@ export default function InspectionScreen({
             />
           </div>
           <p className="mt-2 text-sm text-white/70">
-            {completedCount} / {zones.length} zones completed
+            {completedCount} / {zones.length} areas completed
           </p>
         </div>
       </section>
@@ -175,7 +190,7 @@ export default function InspectionScreen({
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-navy/50">
-              Zone {zoneIndex + 1} of {zones.length}
+              Area {zoneIndex + 1} of {zones.length}
             </p>
             <h3 className="mt-1 text-2xl font-semibold text-navy">{zone.title}</h3>
           </div>
@@ -212,7 +227,7 @@ export default function InspectionScreen({
             }`}
           >
             <CheckIcon />{" "}
-            {zoneStatus === "confirmed" ? "Zone Completed" : "Complete Zone"}
+            {zoneStatus === "confirmed" ? "Area Completed" : "Complete Area"}
           </button>
 
           {/* Divider */}
@@ -225,9 +240,11 @@ export default function InspectionScreen({
           </div>
 
           {/* Secondary action */}
+          {/* Findings can be added to any area, including completed ones
+              revisited via the progress dots. */}
           <button
             onClick={() => setSheetOpen(true)}
-            disabled={zoneStatus === "confirmed" || advancing}
+            disabled={advancing}
             className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl border-2 border-status-red/30 bg-status-red-soft text-base font-semibold text-status-red transition-all active:scale-[0.98] hover:border-status-red/50 disabled:opacity-40"
           >
             ⚠ {zoneFindingCount > 0 ? "Report Another Finding" : "Report Finding"}
@@ -235,23 +252,37 @@ export default function InspectionScreen({
         </div>
       </main>
 
-      {/* Zone progress dots */}
-      <footer className="flex items-center justify-center gap-2.5 px-5 pb-7 pt-5">
+      {/* Area progress dots — tappable, colored by worst finding severity:
+          immediate (red) > monitor (yellow) > completed clean (green) >
+          not visited (grey). Current area = navy highlight. */}
+      <footer className="flex items-center justify-center px-5 pb-4 pt-2">
         {zones.map((z, i) => {
           const s = zoneStatuses[i];
-          return (
-            <span
-              key={z.id}
-              className={`rounded-full transition-all duration-300 ${
-                i === zoneIndex
-                  ? "h-2.5 w-7 bg-navy"
-                  : s === "confirmed"
+          const sev = worstSeverity(z.id);
+          const dot =
+            i === zoneIndex
+              ? "h-2.5 w-7 bg-navy"
+              : sev === "immediate"
+                ? "size-2.5 bg-status-red"
+                : sev === "monitor"
+                  ? "size-2.5 bg-status-yellow"
+                  : s !== "pending"
                     ? "size-2.5 bg-status-green"
-                    : s === "issue"
-                      ? "size-2.5 bg-status-yellow"
-                      : "size-2.5 bg-navy/15"
-              }`}
-            />
+                    : "size-2.5 bg-navy/15";
+          return (
+            <button
+              key={z.id}
+              aria-label={`Go to area ${i + 1}: ${z.title}`}
+              aria-current={i === zoneIndex ? "step" : undefined}
+              onClick={() => {
+                if (!advancing && i !== zoneIndex) onGoToZone(i);
+              }}
+              className="flex min-h-11 min-w-6 items-center justify-center"
+            >
+              <span
+                className={`rounded-full transition-all duration-300 ${dot}`}
+              />
+            </button>
           );
         })}
       </footer>

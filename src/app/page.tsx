@@ -253,10 +253,17 @@ export default function App() {
             zoneFindingCount={
               findings.filter((f) => f.zone === currentZoneId).length
             }
+            findings={findings}
             onConfirmZone={confirmZone}
             onSaveFinding={saveFinding}
             onNextZone={() => {
               setZoneIndex((i) => i + 1);
+              setZoneStartedAt(nowMs());
+            }}
+            onGoToZone={(i) => {
+              // Free navigation between areas — never touches existing
+              // findings or completed statuses.
+              setZoneIndex(i);
               setZoneStartedAt(nowMs());
             }}
             onFinish={() => {
