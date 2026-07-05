@@ -17,10 +17,16 @@ import type {
 /** Bump when the payload shape changes; n8n validates against this. */
 export const PAYLOAD_SCHEMA_VERSION = "1.0";
 
-/** Photos are object URLs for now; upload/transfer strategy comes with n8n. */
 export interface PhotoMetadata {
-  order: number;
-  objectUrl: string;
+  /**
+   * Local blob object URL — preview/debugging ONLY. n8n cannot fetch this;
+   * it only exists inside the inspector's browser session. The raw photo
+   * file will be uploaded separately once the backend is implemented.
+   */
+  localObjectUrl: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
 }
 
 export interface VoiceMetadata {
@@ -102,6 +108,11 @@ export function buildSubmissionPayload(input: {
   const zoneTitle = (id: string) =>
     zones.find((z) => z.id === id)?.title ?? id;
 
+  // Finalization is enforced here, not trusted from the caller: as soon as
+  // completedAt is provided, the payload is a final submission — status must
+  // be "Completed" and durationSeconds is derived startedAt → completedAt.
+  const isFinal = completedAt != null;
+
   return {
     schemaVersion: PAYLOAD_SCHEMA_VERSION,
     inspection: {
@@ -110,11 +121,12 @@ export function buildSubmissionPayload(input: {
       propertyName: session.propertyName,
       inspectionType: session.inspectionType,
       inspector: session.inspector,
-      status: session.status,
+      status: isFinal ? "Completed" : session.status,
       startedAt: new Date(session.startedAt).toISOString(),
-      completedAt:
-        completedAt != null ? new Date(completedAt).toISOString() : null,
-      durationSeconds,
+      completedAt: isFinal ? new Date(completedAt).toISOString() : null,
+      durationSeconds: isFinal
+        ? Math.max(0, Math.round((completedAt - session.startedAt) / 1000))
+        : durationSeconds,
     },
     zones: zones.map((zone, i) => ({
       zoneId: zone.id,
@@ -132,7 +144,12 @@ export function buildSubmissionPayload(input: {
       timestamp: f.timestamp,
       optionalNote: f.optionalNote,
       photoCount: f.photos.length,
-      photos: f.photos.map((url, order) => ({ order, objectUrl: url })),
+      photos: f.photos.map((p) => ({
+        localObjectUrl: p.localObjectUrl,
+        name: p.name,
+        mimeType: p.mimeType,
+        sizeBytes: p.sizeBytes,
+      })),
       voiceRecording: f.voiceRecording
         ? {
             localObjectUrl: f.voiceRecording.localObjectUrl,

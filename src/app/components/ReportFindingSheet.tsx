@@ -6,6 +6,7 @@ import {
   type FindingDraft,
   type HealthDimension,
   type InspectionZone,
+  type PhotoAttachment,
   type Severity,
   type VoiceRecording,
 } from "@/types/inspection";
@@ -33,7 +34,7 @@ interface Props {
 export default function ReportFindingSheet({ zone, onClose, onSave }: Props) {
   const [dimension, setDimension] = useState<HealthDimension | null>(null);
   const [severity, setSeverity] = useState<Severity | null>(null);
-  const [photos, setPhotos] = useState<string[]>([]);
+  const [photos, setPhotos] = useState<PhotoAttachment[]>([]);
   const [voice, setVoice] = useState<VoiceRecording | null>(null);
   const [note, setNote] = useState("");
 
@@ -118,13 +119,20 @@ export default function ReportFindingSheet({ zone, onClose, onSave }: Props) {
     if (!files || files.length === 0) return;
     setPhotos((prev) => [
       ...prev,
-      ...Array.from(files).map((f) => URL.createObjectURL(f)),
+      ...Array.from(files).map(
+        (f): PhotoAttachment => ({
+          localObjectUrl: URL.createObjectURL(f),
+          name: f.name || "photo.jpg",
+          mimeType: f.type || "image/jpeg",
+          sizeBytes: f.size,
+        })
+      ),
     ]);
   };
 
   const removePhoto = (url: string) => {
     URL.revokeObjectURL(url);
-    setPhotos((prev) => prev.filter((p) => p !== url));
+    setPhotos((prev) => prev.filter((p) => p.localObjectUrl !== url));
   };
 
   const movePhoto = (index: number, dir: -1 | 1) => {
@@ -237,18 +245,18 @@ export default function ReportFindingSheet({ zone, onClose, onSave }: Props) {
         />
         {photos.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-4">
-            {photos.map((url, i) => (
-              <div key={url} className="relative">
+            {photos.map((photo, i) => (
+              <div key={photo.localObjectUrl} className="relative">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={url}
+                  src={photo.localObjectUrl}
                   alt={`Evidence photo ${i + 1}`}
                   className="size-20 rounded-xl object-cover shadow-sm"
                 />
                 {/* 44px hit areas with small visuals inside */}
                 <button
                   aria-label="Remove photo"
-                  onClick={() => removePhoto(url)}
+                  onClick={() => removePhoto(photo.localObjectUrl)}
                   className="absolute -right-2 -top-2 flex size-11 items-center justify-center"
                 >
                   <span className="flex size-5 items-center justify-center rounded-full bg-navy text-[10px] font-bold text-white shadow">

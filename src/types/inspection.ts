@@ -55,6 +55,19 @@ export interface InspectionSession {
   status: InspectionStatus;
 }
 
+export interface PhotoAttachment {
+  /**
+   * Blob object URL for LOCAL preview only. It is not a usable file URL
+   * outside this browser session and cannot be sent to n8n. Raw photo
+   * upload will be implemented with the backend integration.
+   */
+  localObjectUrl: string;
+  /** Original file name (camera captures may use a generic name). */
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
 export interface VoiceRecording {
   /**
    * Blob object URL for LOCAL playback/preview only. It is not a usable
@@ -88,8 +101,8 @@ export interface Finding {
   zone: string;
   healthDimension: HealthDimension;
   severity: Severity;
-  /** Object URLs of attached photos. */
-  photos: string[];
+  /** Attached photos with local preview URL + file metadata. */
+  photos: PhotoAttachment[];
   voiceRecording: VoiceRecording | null;
   optionalNote: string;
   /** ISO timestamp of when the finding was captured. */
