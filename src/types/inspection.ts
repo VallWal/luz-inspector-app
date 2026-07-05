@@ -56,9 +56,16 @@ export interface InspectionSession {
 }
 
 export interface VoiceRecording {
-  /** Object URL of the recorded audio blob. */
-  url: string;
+  /**
+   * Blob object URL for LOCAL playback/preview only. It is not a usable
+   * file URL outside this browser session and cannot be sent to n8n.
+   * Raw audio upload will be implemented with the backend integration.
+   */
+  localObjectUrl: string;
   durationSec: number;
+  /** e.g. "audio/webm" or "audio/mp4" (Safari). */
+  mimeType: string;
+  sizeBytes: number;
 }
 
 /**
@@ -73,6 +80,8 @@ export interface VoiceRecording {
  * to Airtable, from which the PDF report and Owner Portal are generated.
  */
 export interface Finding {
+  /** Stable id assigned at creation, e.g. "fnd-insp-p-014-1-001". */
+  findingId: string;
   inspectionId: string;
   propertyId: string;
   /** Zone id from the inspection type config. */

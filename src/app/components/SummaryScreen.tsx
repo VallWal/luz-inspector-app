@@ -1,16 +1,23 @@
+"use client";
+
+import { useMemo } from "react";
 import type { Property } from "../data";
 import {
   HEALTH_DIMENSIONS,
   healthFromFindings,
   type Finding,
+  type InspectionSession,
   type InspectionZone,
   type ZoneStatus,
 } from "@/types/inspection";
 import { formatDuration } from "../lib/duration";
+import { buildSubmissionPayload } from "../lib/payload";
 import { BackButton, CheckIcon } from "./icons";
+import DevPayloadSection from "./DevPayloadSection";
 
 interface Props {
   property: Property;
+  session: InspectionSession;
   zones: InspectionZone[];
   zoneStatuses: ZoneStatus[];
   findings: Finding[];
@@ -23,6 +30,7 @@ interface Props {
 
 export default function SummaryScreen({
   property,
+  session,
   zones,
   zoneStatuses,
   findings,
@@ -34,6 +42,22 @@ export default function SummaryScreen({
   const confirmedCount = zoneStatuses.filter((s) => s === "confirmed").length;
   const issueCount = zoneStatuses.filter((s) => s === "issue").length;
   const health = healthFromFindings(findings);
+
+  // Debug preview while the inspection is still open — status stays
+  // "In Progress" here; the final payload is built on Complete Inspection.
+  const previewPayload = useMemo(
+    () =>
+      buildSubmissionPayload({
+        session,
+        zones,
+        zoneStatuses,
+        zoneDurations,
+        findings,
+        completedAt: null,
+        durationSeconds: elapsedSeconds,
+      }),
+    [session, zones, zoneStatuses, zoneDurations, findings, elapsedSeconds]
+  );
 
   return (
     <div className="flex min-h-full flex-col">
@@ -231,6 +255,12 @@ export default function SummaryScreen({
             </ul>
           </section>
         )}
+
+        {/* Developer: debug preview of the n8n submission JSON */}
+        <DevPayloadSection
+          payload={previewPayload}
+          note='Debug preview — status stays "In Progress" with completedAt: null until Complete Inspection is tapped.'
+        />
       </main>
 
       {/* Bottom action */}

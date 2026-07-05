@@ -1,7 +1,9 @@
 import type { Property } from "../data";
 import type { Finding, ZoneStatus } from "@/types/inspection";
+import type { InspectionSubmissionPayload } from "../lib/payload";
 import { formatDuration } from "../lib/duration";
 import { CheckIcon } from "./icons";
+import DevPayloadSection from "./DevPayloadSection";
 
 interface Props {
   property: Property;
@@ -10,6 +12,8 @@ interface Props {
   durationSeconds: number | null;
   /** Epoch ms; kept in state for the future n8n submission payload. */
   completedAt: number | null;
+  /** Finalized payload built on Complete Inspection — what n8n will receive. */
+  submissionPayload: InspectionSubmissionPayload | null;
   onDone: () => void;
 }
 
@@ -18,6 +22,7 @@ export default function CompleteScreen({
   zoneStatuses,
   findings,
   durationSeconds,
+  submissionPayload,
   onDone,
 }: Props) {
   const confirmedCount = zoneStatuses.filter((s) => s === "confirmed").length;
@@ -63,6 +68,15 @@ export default function CompleteScreen({
           </div>
         </div>
 
+        {/* Developer: the finalized JSON exactly as n8n will receive it */}
+        {submissionPayload && (
+          <div className="anim-rise mt-4 w-full text-left">
+            <DevPayloadSection
+              payload={submissionPayload}
+              note='Final payload — status "Completed", completedAt and durationSeconds are set. voiceRecording.localObjectUrl is local preview only; audio upload comes with the backend.'
+            />
+          </div>
+        )}
       </main>
 
       {/* Bottom action */}

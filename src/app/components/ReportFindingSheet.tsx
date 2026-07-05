@@ -58,18 +58,27 @@ export default function ReportFindingSheet({ zone, onClose, onSave }: Props) {
 
   const startRecording = async () => {
     setMicError(null);
+    // MediaRecorder is not available in all browsers/contexts — degrade to notes.
+    if (
+      typeof MediaRecorder === "undefined" ||
+      !navigator.mediaDevices?.getUserMedia
+    ) {
+      setMicError("Voice recording not supported — use the notes field instead.");
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
       chunksRef.current = [];
       recorder.ondataavailable = (e) => chunksRef.current.push(e.data);
       recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, {
-          type: recorder.mimeType || "audio/webm",
-        });
+        const mimeType = recorder.mimeType || "audio/webm";
+        const blob = new Blob(chunksRef.current, { type: mimeType });
         setVoice({
-          url: URL.createObjectURL(blob),
+          localObjectUrl: URL.createObjectURL(blob),
           durationSec: secondsRef.current,
+          mimeType: blob.type || mimeType,
+          sizeBytes: blob.size,
         });
         stream.getTracks().forEach((t) => t.stop());
       };
@@ -96,7 +105,7 @@ export default function ReportFindingSheet({ zone, onClose, onSave }: Props) {
   };
 
   const deleteRecording = () => {
-    if (voice) URL.revokeObjectURL(voice.url);
+    if (voice) URL.revokeObjectURL(voice.localObjectUrl);
     setVoice(null);
     setSeconds(0);
   };
@@ -308,7 +317,11 @@ export default function ReportFindingSheet({ zone, onClose, onSave }: Props) {
                 <p className="text-sm font-semibold text-navy">
                   Recording · {formatDuration(voice.durationSec)}
                 </p>
-                <audio controls src={voice.url} className="mt-1.5 h-8 w-full" />
+                <audio
+                  controls
+                  src={voice.localObjectUrl}
+                  className="mt-1.5 h-8 w-full"
+                />
               </div>
               <button
                 onClick={deleteRecording}

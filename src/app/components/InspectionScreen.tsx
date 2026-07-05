@@ -14,7 +14,10 @@ import ReportFindingSheet from "./ReportFindingSheet";
 const ADVANCE_DELAY_MS = 950;
 const MAX_VISIBLE_OBSERVE_ITEMS = 6;
 
-/** "Things to observe" — lightweight guidance, collapses beyond 6 items. */
+/**
+ * "Things to observe" — lightweight guidance, collapses beyond 6 items.
+ * "Show more" expands the card fully (no internal scroll area).
+ */
 function ThingsToObserve({ items }: { items: ChecklistItem[] }) {
   const [expanded, setExpanded] = useState(false);
   const overflow = items.length > MAX_VISIBLE_OBSERVE_ITEMS;
@@ -22,15 +25,11 @@ function ThingsToObserve({ items }: { items: ChecklistItem[] }) {
     overflow && !expanded ? items.slice(0, MAX_VISIBLE_OBSERVE_ITEMS) : items;
 
   return (
-    <div className="mt-5 flex min-h-0 flex-col">
+    <div className="mt-5 flex flex-col">
       <p className="text-xs font-medium uppercase tracking-wider text-navy/50">
         Things to observe
       </p>
-      <ul
-        className={`mt-2.5 flex flex-col gap-2 ${
-          expanded ? "max-h-56 overflow-y-auto overscroll-contain pr-1" : ""
-        }`}
-      >
+      <ul className="mt-2.5 flex flex-col gap-2">
         {visible.map((item) => (
           <li
             key={item.id}
@@ -62,6 +61,8 @@ interface Props {
   zones: InspectionZone[];
   zoneIndex: number;
   zoneStatuses: ZoneStatus[];
+  /** Findings recorded in the current zone (a zone can have several). */
+  zoneFindingCount: number;
   onConfirmZone: () => void;
   onSaveFinding: (draft: FindingDraft) => void;
   onNextZone: () => void;
@@ -75,6 +76,7 @@ export default function InspectionScreen({
   zones,
   zoneIndex,
   zoneStatuses,
+  zoneFindingCount,
   onConfirmZone,
   onSaveFinding,
   onNextZone,
@@ -115,17 +117,18 @@ export default function InspectionScreen({
     }, ADVANCE_DELAY_MS);
   };
 
+  // Complete Zone is the only way to advance — also for zones with findings.
   const confirmZone = () => {
-    if (advancing || zoneStatus !== "pending") return;
+    if (advancing || zoneStatus === "confirmed") return;
     onConfirmZone();
     scheduleAdvance();
   };
 
+  // Saving a finding stays in the same zone so more findings can be added.
   const saveFinding = (draft: FindingDraft) => {
     onSaveFinding(draft);
     setSheetOpen(false);
     setToast("Finding saved");
-    scheduleAdvance();
   };
 
   return (
@@ -182,8 +185,12 @@ export default function InspectionScreen({
             </span>
           )}
           {zoneStatus === "issue" && (
-            <span className="anim-pop-fast flex items-center gap-1.5 rounded-full bg-status-yellow-soft px-3 py-1.5 text-sm font-medium text-status-yellow">
-              ⚠ Issue reported
+            <span
+              key={zoneFindingCount}
+              className="anim-pop-fast flex shrink-0 items-center gap-1.5 rounded-full bg-status-yellow-soft px-3 py-1.5 text-sm font-medium text-status-yellow"
+            >
+              ⚠ {zoneFindingCount} finding{zoneFindingCount === 1 ? "" : "s"}{" "}
+              recorded
             </span>
           )}
         </div>
@@ -197,9 +204,9 @@ export default function InspectionScreen({
           {/* Primary action */}
           <button
             onClick={confirmZone}
-            disabled={zoneStatus !== "pending"}
+            disabled={advancing || zoneStatus === "confirmed"}
             className={`flex h-16 w-full items-center justify-center gap-2 rounded-2xl text-lg font-semibold shadow-md transition-all active:scale-[0.98] ${
-              zoneStatus === "confirmed"
+              zoneStatus === "confirmed" || (advancing && zoneStatus === "issue")
                 ? "bg-status-green text-white shadow-status-green/25"
                 : "bg-navy text-white shadow-navy/25 hover:bg-navy-deep disabled:opacity-40"
             }`}
@@ -220,10 +227,10 @@ export default function InspectionScreen({
           {/* Secondary action */}
           <button
             onClick={() => setSheetOpen(true)}
-            disabled={zoneStatus !== "pending" || advancing}
+            disabled={zoneStatus === "confirmed" || advancing}
             className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl border-2 border-status-red/30 bg-status-red-soft text-base font-semibold text-status-red transition-all active:scale-[0.98] hover:border-status-red/50 disabled:opacity-40"
           >
-            ⚠ Report Finding
+            ⚠ {zoneFindingCount > 0 ? "Report Another Finding" : "Report Finding"}
           </button>
         </div>
       </main>

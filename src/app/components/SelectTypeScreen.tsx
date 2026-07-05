@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { Property } from "../data";
 import { INSPECTION_TYPE_NAMES } from "@/config/inspectionTypes";
 import { BackButton, CheckIcon } from "./icons";
+import PropertyNotes from "./PropertyNotes";
 
 interface Props {
   property: Property;
@@ -39,6 +40,9 @@ export default function SelectTypeScreen({ property, onBack, onStart }: Props) {
         </div>
         <p className="mt-0.5 text-sm text-white/60">{property.address}</p>
       </section>
+
+      {/* Field guidance before starting the inspection */}
+      <PropertyNotes propertyId={property.id} />
 
       {/* Type list */}
       <main className="mx-5 mt-4 flex flex-1 flex-col rounded-3xl bg-white px-6 py-6 shadow-sm">

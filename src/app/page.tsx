@@ -13,6 +13,10 @@ import type {
   InspectionZone,
   ZoneStatus,
 } from "@/types/inspection";
+import {
+  buildSubmissionPayload,
+  type InspectionSubmissionPayload,
+} from "./lib/payload";
 import HomeScreen from "./components/HomeScreen";
 import SelectPropertyScreen from "./components/SelectPropertyScreen";
 import SelectTypeScreen from "./components/SelectTypeScreen";
@@ -64,6 +68,11 @@ export default function App() {
   const [zoneIndex, setZoneIndex] = useState(0);
   const [findings, setFindings] = useState<Finding[]>([]);
   const inspectionSeq = useRef(0);
+  /** Per-inspection counter so findingIds stay stable regardless of array order. */
+  const findingSeq = useRef(0);
+  /** Final payload built on Complete Inspection — later POSTed to n8n. */
+  const [submissionPayload, setSubmissionPayload] =
+    useState<InspectionSubmissionPayload | null>(null);
 
   // Duration tracking
   const [completedAt, setCompletedAt] = useState<number | null>(null);
@@ -137,6 +146,8 @@ export default function App() {
     setZoneStatuses(zonesForSession(newSession).map(() => "pending"));
     setZoneIndex(0);
     setFindings([]);
+    findingSeq.current = 0;
+    setSubmissionPayload(null);
     setCompletedAt(null);
     setDurationSeconds(null);
     setSummaryElapsedSec(null);
@@ -149,10 +160,11 @@ export default function App() {
     }, 1100);
   };
 
+  /** Complete Zone: a zone with findings keeps its "issue" status. */
   const confirmZone = () => {
     closeZoneTiming();
     setZoneStatuses((prev) =>
-      prev.map((s, i) => (i === zoneIndex ? "confirmed" : s))
+      prev.map((s, i) => (i === zoneIndex && s === "pending" ? "confirmed" : s))
     );
   };
 
@@ -160,6 +172,10 @@ export default function App() {
     if (!session) return;
     closeZoneTiming();
     const zone = zonesForSession(session)[zoneIndex];
+    findingSeq.current += 1;
+    const findingId = `fnd-${session.inspectionId}-${String(
+      findingSeq.current
+    ).padStart(3, "0")}`;
     setZoneStatuses((prev) =>
       prev.map((s, i) => (i === zoneIndex ? "issue" : s))
     );
@@ -167,6 +183,7 @@ export default function App() {
       ...prev,
       {
         ...draft,
+        findingId,
         inspectionId: session.inspectionId,
         propertyId: session.propertyId,
         zone: zone.id,
@@ -224,13 +241,18 @@ export default function App() {
       case "inspection": {
         if (!session) return null;
         const property = getProperty(session.propertyId);
+        const zones = zonesForSession(session);
+        const currentZoneId = zones[zoneIndex]?.id;
         return (
           <InspectionScreen
             property={property}
             inspectionType={session.inspectionType}
-            zones={zonesForSession(session)}
+            zones={zones}
             zoneIndex={zoneIndex}
             zoneStatuses={zoneStatuses}
+            zoneFindingCount={
+              findings.filter((f) => f.zone === currentZoneId).length
+            }
             onConfirmZone={confirmZone}
             onSaveFinding={saveFinding}
             onNextZone={() => {
@@ -252,6 +274,7 @@ export default function App() {
         return (
           <SummaryScreen
             property={getProperty(session.propertyId)}
+            session={session}
             zones={zonesForSession(session)}
             zoneStatuses={zoneStatuses}
             findings={findings}
@@ -259,10 +282,31 @@ export default function App() {
             zoneDurations={zoneDurations}
             onBack={() => navigate({ name: "inspection" }, "back")}
             onComplete={() => {
+              // 1. Finalize the inspection…
               const end = nowMs();
+              const finalDuration = Math.round(
+                (end - session.startedAt) / 1000
+              );
+              const finalSession: InspectionSession = {
+                ...session,
+                status: "Completed",
+              };
               setCompletedAt(end);
-              setDurationSeconds(Math.round((end - session.startedAt) / 1000));
-              setSession({ ...session, status: "Completed" });
+              setDurationSeconds(finalDuration);
+              setSession(finalSession);
+              // 2. …then build the submission payload from finalized values.
+              const payload = buildSubmissionPayload({
+                session: finalSession,
+                zones: zonesForSession(finalSession),
+                zoneStatuses,
+                zoneDurations,
+                findings,
+                completedAt: end,
+                durationSeconds: finalDuration,
+              });
+              setSubmissionPayload(payload);
+              // Later: POST to n8n. For now, verify in the console.
+              console.log("Inspection submission payload", payload);
               navigate({ name: "complete" }, "fwd");
             }}
           />
@@ -277,6 +321,7 @@ export default function App() {
             findings={findings}
             durationSeconds={durationSeconds}
             completedAt={completedAt}
+            submissionPayload={submissionPayload}
             onDone={() => {
               setSession(null);
               navigate({ name: "home" }, "fwd");
