@@ -67,6 +67,7 @@ interface Props {
   /** All findings of the session — used to color the area progress dots. */
   findings: Finding[];
   onConfirmZone: () => void;
+  onMarkNotApplicable: () => void;
   onSaveFinding: (draft: FindingDraft) => void;
   onNextZone: () => void;
   /** Jump to any area via the progress dots (state is preserved). */
@@ -84,6 +85,7 @@ export default function InspectionScreen({
   zoneFindingCount,
   findings,
   onConfirmZone,
+  onMarkNotApplicable,
   onSaveFinding,
   onNextZone,
   onGoToZone,
@@ -93,7 +95,10 @@ export default function InspectionScreen({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [advancing, setAdvancing] = useState(false);
+  /** Direction of the last area change — picks the slide animation. */
+  const [navDir, setNavDir] = useState<"fwd" | "back">("fwd");
   const timer = useRef<number | null>(null);
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     if (!toast) return;
@@ -125,11 +130,37 @@ export default function InspectionScreen({
 
   const scheduleAdvance = () => {
     setAdvancing(true);
+    setNavDir("fwd");
     timer.current = window.setTimeout(() => {
       setAdvancing(false);
       if (isLastZone) onFinish();
       else onNextZone();
     }, ADVANCE_DELAY_MS);
+  };
+
+  /** Dot tap / swipe navigation — free movement, state is preserved. */
+  const jumpTo = (index: number) => {
+    if (advancing || index === zoneIndex) return;
+    if (index < 0 || index >= zones.length) return;
+    setNavDir(index > zoneIndex ? "fwd" : "back");
+    onGoToZone(index);
+  };
+
+  // Swipe left = next area, swipe right = previous. Disabled while the
+  // Report Finding sheet is open (covers photo picker + voice recording,
+  // which live inside the sheet) and during the Complete Area advance.
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = touchStart.current;
+    touchStart.current = null;
+    if (!start || sheetOpen || advancing) return;
+    const dx = e.changedTouches[0].clientX - start.x;
+    const dy = e.changedTouches[0].clientY - start.y;
+    // Horizontal intent only — never hijack vertical scrolling.
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    jumpTo(dx < 0 ? zoneIndex + 1 : zoneIndex - 1);
   };
 
   // Complete Zone is the only way to advance — also for zones with findings.
@@ -147,7 +178,11 @@ export default function InspectionScreen({
   };
 
   return (
-    <div className="flex min-h-full flex-col">
+    <div
+      className="flex min-h-full flex-col"
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+    >
       {/* Top navigation */}
       <header className="flex items-center gap-3 px-5 pt-5 pb-2">
         <BackButton onClick={onBack} />
@@ -182,10 +217,12 @@ export default function InspectionScreen({
         </div>
       </section>
 
-      {/* Current zone (re-animates on zone change) */}
+      {/* Current area (re-animates on change, direction-aware slide) */}
       <main
         key={zone.id}
-        className="anim-zone-in mx-5 mt-4 flex flex-1 flex-col rounded-3xl bg-white px-6 py-7 shadow-sm"
+        className={`${
+          navDir === "fwd" ? "anim-zone-in" : "anim-zone-in-back"
+        } mx-5 mt-4 flex flex-1 flex-col rounded-3xl bg-white px-6 py-7 shadow-sm`}
       >
         <div className="flex items-center justify-between">
           <div>
@@ -206,6 +243,11 @@ export default function InspectionScreen({
             >
               ⚠ {zoneFindingCount} finding{zoneFindingCount === 1 ? "" : "s"}{" "}
               recorded
+            </span>
+          )}
+          {zoneStatus === "not_applicable" && (
+            <span className="anim-pop-fast flex shrink-0 items-center gap-1.5 rounded-full bg-navy/10 px-3 py-1.5 text-sm font-medium text-navy/50">
+              – Not Applicable
             </span>
           )}
         </div>
@@ -249,6 +291,24 @@ export default function InspectionScreen({
           >
             ⚠ {zoneFindingCount > 0 ? "Report Another Finding" : "Report Finding"}
           </button>
+
+          {/* Tertiary action: intentionally skip this area. Counts as
+              completed, creates no finding. Hidden once findings exist. */}
+          {zoneFindingCount === 0 && (
+            <button
+              onClick={() => {
+                if (advancing || zoneStatus === "not_applicable") return;
+                onMarkNotApplicable();
+                scheduleAdvance();
+              }}
+              disabled={advancing || zoneStatus === "not_applicable"}
+              className="mt-3 flex min-h-11 w-full items-center justify-center text-sm font-semibold text-navy/45 transition-colors hover:text-navy/70 disabled:opacity-50"
+            >
+              {zoneStatus === "not_applicable"
+                ? "– Marked Not Applicable"
+                : "Not Applicable"}
+            </button>
+          )}
         </div>
       </main>
 
@@ -259,6 +319,7 @@ export default function InspectionScreen({
         {zones.map((z, i) => {
           const s = zoneStatuses[i];
           const sev = worstSeverity(z.id);
+          // Priority: immediate > monitor > confirmed > not_applicable > pending
           const dot =
             i === zoneIndex
               ? "h-2.5 w-7 bg-navy"
@@ -266,17 +327,17 @@ export default function InspectionScreen({
                 ? "size-2.5 bg-status-red"
                 : sev === "monitor"
                   ? "size-2.5 bg-status-yellow"
-                  : s !== "pending"
-                    ? "size-2.5 bg-status-green"
-                    : "size-2.5 bg-navy/15";
+                  : s === "not_applicable"
+                    ? "h-[3px] w-3 bg-navy/30" // grey dash
+                    : s !== "pending"
+                      ? "size-2.5 bg-status-green"
+                      : "size-2.5 bg-navy/15";
           return (
             <button
               key={z.id}
               aria-label={`Go to area ${i + 1}: ${z.title}`}
               aria-current={i === zoneIndex ? "step" : undefined}
-              onClick={() => {
-                if (!advancing && i !== zoneIndex) onGoToZone(i);
-              }}
+              onClick={() => jumpTo(i)}
               className="flex min-h-11 min-w-6 items-center justify-center"
             >
               <span

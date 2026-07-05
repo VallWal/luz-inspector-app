@@ -15,7 +15,7 @@ export const HEALTH_DIMENSIONS = [
 export type HealthDimension = (typeof HEALTH_DIMENSIONS)[number];
 
 export type Severity = "monitor" | "immediate";
-export type ZoneStatus = "pending" | "confirmed" | "issue";
+export type ZoneStatus = "pending" | "confirmed" | "issue" | "not_applicable";
 export type HealthStatus = "good" | "monitor" | "action";
 
 export interface ChecklistItem {

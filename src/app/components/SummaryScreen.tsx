@@ -182,6 +182,10 @@ export default function SummaryScreen({
                       <span className="text-sm font-medium text-status-yellow">
                         ⚠ Issue
                       </span>
+                    ) : status === "not_applicable" ? (
+                      <span className="text-sm font-medium text-navy/40">
+                        – Not Applicable
+                      </span>
                     ) : (
                       <span className="text-sm text-navy/40">Skipped</span>
                     )}

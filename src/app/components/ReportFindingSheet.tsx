@@ -112,29 +112,42 @@ export default function ReportFindingSheet({ zone, onClose, onSave }: Props) {
   };
 
   // ---- Photos (evidence) --------------------------------------------------------
-  const cameraInputRef = useRef<HTMLInputElement>(null);
-  const galleryInputRef = useRef<HTMLInputElement>(null);
-  /** TEMP debug: proves the tap handler ran and input.click() was called. */
-  const [pickerRequested, setPickerRequested] = useState(false);
+  // TEMP debug state for verifying picker behavior across iPhones.
+  const [cameraTapped, setCameraTapped] = useState(false);
+  const [libraryTapped, setLibraryTapped] = useState(false);
+  const [lastSelectedCount, setLastSelectedCount] = useState<number | null>(
+    null
+  );
+  const [lastPhotoError, setLastPhotoError] = useState<string | null>(null);
 
   const addPhotos = (files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    // IMPORTANT: materialize the FileList NOW, inside the event handler.
-    // FileList is a live object — the caller resets input.value right after
-    // this call, which empties the list. The setPhotos updater runs later
-    // (during the next render), so mapping the FileList inside the updater
-    // would silently produce zero photos.
-    const attachments = Array.from(files).map(
-      (f): PhotoAttachment => ({
-        localObjectUrl: URL.createObjectURL(f),
-        name: f.name || "photo.jpg",
-        mimeType: f.type || "image/jpeg",
-        sizeBytes: f.size,
-      })
-    );
-    // Debug: verify capture/selection reached React state.
-    console.log("Photos added", attachments);
-    setPhotos((prev) => [...prev, ...attachments]);
+    try {
+      if (!files || files.length === 0) {
+        setLastSelectedCount(0);
+        return;
+      }
+      // IMPORTANT: materialize the FileList NOW, inside the event handler.
+      // FileList is a live object — the caller resets input.value right after
+      // this call, which empties the list. The setPhotos updater runs later
+      // (during the next render), so mapping the FileList inside the updater
+      // would silently produce zero photos.
+      const attachments = Array.from(files).map(
+        (f): PhotoAttachment => ({
+          localObjectUrl: URL.createObjectURL(f),
+          name: f.name || "photo.jpg",
+          mimeType: f.type || "image/jpeg",
+          sizeBytes: f.size,
+        })
+      );
+      console.log("Photos added", attachments);
+      setLastSelectedCount(attachments.length);
+      setLastPhotoError(null);
+      setPhotos((prev) => [...prev, ...attachments]);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("Photo selection failed", err);
+      setLastPhotoError(msg);
+    }
   };
 
   const removePhoto = (url: string) => {
@@ -230,38 +243,39 @@ export default function ReportFindingSheet({ zone, onClose, onSave }: Props) {
         </p>
         {/* TEMP debug: remove once photo flow is verified on device */}
         <p className="mt-1 text-xs font-medium text-navy/40">
-          Photo picker requested: {pickerRequested ? "yes" : "no"} · Photos
-          selected: {photos.length}
+          Camera tapped: {cameraTapped ? "yes" : "no"} · Library tapped:{" "}
+          {libraryTapped ? "yes" : "no"} · Last selection:{" "}
+          {lastSelectedCount ?? "–"} · Total: {photos.length}
         </p>
+        {lastPhotoError && (
+          <p className="mt-0.5 text-xs font-medium text-status-red">
+            Photo error: {lastPhotoError}
+          </p>
+        )}
         {/*
-          iOS Safari fix: NOT display:none (hidden attribute) — some iOS
-          versions refuse programmatic .click() on display:none file inputs.
-          Visually hidden but accessible instead: 1px, opacity 0, absolute,
-          pointer-events none. Tap targets below are real <button>s whose
-          handlers call input.click() synchronously (no async before click).
+          iOS Safari reliability: the tap targets are <label htmlFor> elements
+          — native label activation opens the picker with no JS click() at
+          all, which is the most reliable path across iOS versions. Inputs
+          are visually hidden (never display:none; iOS can refuse pickers on
+          display:none inputs).
         */}
         <input
-          ref={cameraInputRef}
+          id="camera-input"
           type="file"
           accept="image/*"
           capture="environment"
-          multiple
-          aria-hidden="true"
-          tabIndex={-1}
-          className="pointer-events-none absolute h-px w-px opacity-0"
+          className="input-visually-hidden"
           onChange={(e) => {
             addPhotos(e.target.files);
             e.target.value = "";
           }}
         />
         <input
-          ref={galleryInputRef}
+          id="library-input"
           type="file"
           accept="image/*"
           multiple
-          aria-hidden="true"
-          tabIndex={-1}
-          className="pointer-events-none absolute h-px w-px opacity-0"
+          className="input-visually-hidden"
           onChange={(e) => {
             addPhotos(e.target.files);
             e.target.value = "";
@@ -318,28 +332,24 @@ export default function ReportFindingSheet({ zone, onClose, onSave }: Props) {
           </div>
         )}
         <div className="mt-2 grid grid-cols-2 gap-3">
-          {/* Synchronous handlers — input.click() must run inside the tap
-              handler's user-activation window, no awaits before it. */}
-          <button
-            type="button"
-            onClick={() => {
-              setPickerRequested(true);
-              cameraInputRef.current?.click();
-            }}
-            className="flex h-14 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-navy/15 bg-beige-soft text-navy/60 transition-colors hover:border-navy/30"
+          {/* Real <label htmlFor> tap targets — the browser opens the picker
+              natively on activation; no JS, nothing async in the tap path.
+              onClick below only records debug state and does NOT prevent
+              the native label behavior. */}
+          <label
+            htmlFor="camera-input"
+            onClick={() => setCameraTapped(true)}
+            className="flex h-14 cursor-pointer select-none flex-col items-center justify-center rounded-2xl border-2 border-dashed border-navy/15 bg-beige-soft text-navy/60 transition-colors hover:border-navy/30 active:scale-[0.98]"
           >
-            <span className="text-sm font-semibold">📷 Take photo</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setPickerRequested(true);
-              galleryInputRef.current?.click();
-            }}
-            className="flex h-14 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-navy/15 bg-beige-soft text-navy/60 transition-colors hover:border-navy/30"
+            <span className="text-sm font-semibold">📷 Take Photo</span>
+          </label>
+          <label
+            htmlFor="library-input"
+            onClick={() => setLibraryTapped(true)}
+            className="flex h-14 cursor-pointer select-none flex-col items-center justify-center rounded-2xl border-2 border-dashed border-navy/15 bg-beige-soft text-navy/60 transition-colors hover:border-navy/30 active:scale-[0.98]"
           >
-            <span className="text-sm font-semibold">🖼️ Choose photos</span>
-          </button>
+            <span className="text-sm font-semibold">🖼️ Choose from Library</span>
+          </label>
         </div>
 
         {/* Voice description — primary documentation method */}

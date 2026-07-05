@@ -154,11 +154,24 @@ export default function App() {
     }, 1100);
   };
 
-  /** Complete Zone: a zone with findings keeps its "issue" status. */
+  /** Complete Area: an area with findings keeps its "issue" status.
+      A revisited not_applicable area can be changed to confirmed. */
   const confirmZone = () => {
     closeZoneTiming();
     setZoneStatuses((prev) =>
-      prev.map((s, i) => (i === zoneIndex && s === "pending" ? "confirmed" : s))
+      prev.map((s, i) =>
+        i === zoneIndex && (s === "pending" || s === "not_applicable")
+          ? "confirmed"
+          : s
+      )
+    );
+  };
+
+  /** Not Applicable: intentionally skipped, counts as completed, no finding. */
+  const markZoneNotApplicable = () => {
+    closeZoneTiming();
+    setZoneStatuses((prev) =>
+      prev.map((s, i) => (i === zoneIndex ? "not_applicable" : s))
     );
   };
 
@@ -255,6 +268,7 @@ export default function App() {
             }
             findings={findings}
             onConfirmZone={confirmZone}
+            onMarkNotApplicable={markZoneNotApplicable}
             onSaveFinding={saveFinding}
             onNextZone={() => {
               setZoneIndex((i) => i + 1);
