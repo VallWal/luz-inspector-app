@@ -13,10 +13,8 @@ import type {
   InspectionZone,
   ZoneStatus,
 } from "@/types/inspection";
-import {
-  buildSubmissionPayload,
-  type InspectionSubmissionPayload,
-} from "./lib/payload";
+import { buildFinalSubmissionPayload } from "./lib/payload";
+import { submitInspectionPayload } from "./lib/submission";
 import HomeScreen from "./components/HomeScreen";
 import SelectPropertyScreen from "./components/SelectPropertyScreen";
 import SelectTypeScreen from "./components/SelectTypeScreen";
@@ -70,9 +68,6 @@ export default function App() {
   const inspectionSeq = useRef(0);
   /** Per-inspection counter so findingIds stay stable regardless of array order. */
   const findingSeq = useRef(0);
-  /** Final payload built on Complete Inspection — later POSTed to n8n. */
-  const [submissionPayload, setSubmissionPayload] =
-    useState<InspectionSubmissionPayload | null>(null);
 
   // Duration tracking
   const [completedAt, setCompletedAt] = useState<number | null>(null);
@@ -147,7 +142,6 @@ export default function App() {
     setZoneIndex(0);
     setFindings([]);
     findingSeq.current = 0;
-    setSubmissionPayload(null);
     setCompletedAt(null);
     setDurationSeconds(null);
     setSummaryElapsedSec(null);
@@ -179,17 +173,23 @@ export default function App() {
     setZoneStatuses((prev) =>
       prev.map((s, i) => (i === zoneIndex ? "issue" : s))
     );
-    setFindings((prev) => [
-      ...prev,
-      {
-        ...draft,
-        findingId,
-        inspectionId: session.inspectionId,
-        propertyId: session.propertyId,
-        zone: zone.id,
-        timestamp: new Date().toISOString(),
-      },
-    ]);
+    const finding: Finding = {
+      ...draft,
+      findingId,
+      inspectionId: session.inspectionId,
+      propertyId: session.propertyId,
+      zone: zone.id,
+      timestamp: new Date().toISOString(),
+    };
+    // Debug: verify photos/voice survive the sheet → findings hand-off.
+    console.log("Finding stored", {
+      findingId: finding.findingId,
+      zone: finding.zone,
+      photoCount: finding.photos.length,
+      photos: finding.photos,
+      voiceRecording: finding.voiceRecording,
+    });
+    setFindings((prev) => [...prev, finding]);
   };
 
   // ---- Screen rendering ----------------------------------------------------
@@ -282,7 +282,9 @@ export default function App() {
             zoneDurations={zoneDurations}
             onBack={() => navigate({ name: "inspection" }, "back")}
             onComplete={() => {
-              // 1. Finalize the inspection…
+              // Finalize the inspection. The Complete screen derives the
+              // final payload from these values — completedAt != null forces
+              // status "Completed" inside buildSubmissionPayload.
               const end = nowMs();
               const finalDuration = Math.round(
                 (end - session.startedAt) / 1000
@@ -294,19 +296,23 @@ export default function App() {
               setCompletedAt(end);
               setDurationSeconds(finalDuration);
               setSession(finalSession);
-              // 2. …then build the submission payload from finalized values.
-              const payload = buildSubmissionPayload({
+              // Build the finalized payload and send it to the n8n webhook.
+              const payload = buildFinalSubmissionPayload({
                 session: finalSession,
                 zones: zonesForSession(finalSession),
                 zoneStatuses,
                 zoneDurations,
                 findings,
                 completedAt: end,
-                durationSeconds: finalDuration,
               });
-              setSubmissionPayload(payload);
-              // Later: POST to n8n. For now, verify in the console.
-              console.log("Inspection submission payload", payload);
+              console.log("Final submission payload", payload);
+              submitInspectionPayload(payload)
+                .then((res) =>
+                  console.log("n8n webhook response", res.status, res.body)
+                )
+                .catch((err) =>
+                  console.error("Inspection submission failed", err)
+                );
               navigate({ name: "complete" }, "fwd");
             }}
           />
@@ -317,11 +323,13 @@ export default function App() {
         return (
           <CompleteScreen
             property={getProperty(session.propertyId)}
+            session={session}
+            zones={zonesForSession(session)}
             zoneStatuses={zoneStatuses}
+            zoneDurations={zoneDurations}
             findings={findings}
             durationSeconds={durationSeconds}
             completedAt={completedAt}
-            submissionPayload={submissionPayload}
             onDone={() => {
               setSession(null);
               navigate({ name: "home" }, "fwd");

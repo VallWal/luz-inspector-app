@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Property } from "../data";
 import {
   HEALTH_DIMENSIONS,
@@ -11,9 +11,12 @@ import {
   type ZoneStatus,
 } from "@/types/inspection";
 import { formatDuration } from "../lib/duration";
-import { buildSubmissionPayload } from "../lib/payload";
+import {
+  buildFinalSubmissionPayload,
+  buildSubmissionPayload,
+} from "../lib/payload";
+import { submitInspectionPayload } from "../lib/submission";
 import { BackButton, CheckIcon } from "./icons";
-import DevPayloadSection from "./DevPayloadSection";
 
 interface Props {
   property: Property;
@@ -58,6 +61,44 @@ export default function SummaryScreen({
       }),
     [session, zones, zoneStatuses, zoneDurations, findings, elapsedSeconds]
   );
+
+  // ---- Developer: view + submit to the n8n test webhook --------------------
+  const [payloadOpen, setPayloadOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitOk, setSubmitOk] = useState(false);
+  const [errorToast, setErrorToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!errorToast) return;
+    const t = setTimeout(() => setErrorToast(null), 3200);
+    return () => clearTimeout(t);
+  }, [errorToast]);
+
+  const submitInspection = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    setSubmitOk(false);
+    // Always finalized at press time: status "Completed", ISO completedAt,
+    // durationSeconds derived startedAt → completedAt. Never "In Progress".
+    const payload = buildFinalSubmissionPayload({
+      session,
+      zones,
+      zoneStatuses,
+      zoneDurations,
+      findings,
+    });
+    console.log("Submitting inspection to n8n", payload);
+    try {
+      const result = await submitInspectionPayload(payload);
+      console.log("n8n webhook response", result.status, result.body);
+      setSubmitOk(true);
+    } catch (err) {
+      console.error("Inspection submission failed", err);
+      setErrorToast("Submission failed — see console");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="flex min-h-full flex-col">
@@ -256,12 +297,58 @@ export default function SummaryScreen({
           </section>
         )}
 
-        {/* Developer: debug preview of the n8n submission JSON */}
-        <DevPayloadSection
-          payload={previewPayload}
-          note='Debug preview — status stays "In Progress" with completedAt: null until Complete Inspection is tapped.'
-        />
+        {/* Developer: view payload + submit to the n8n test webhook */}
+        <section className="rounded-3xl border border-dashed border-navy/15 bg-beige-soft px-6 py-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-navy/50">
+            Developer
+          </p>
+          <div className="mt-2.5 grid grid-cols-2 gap-3">
+            <button
+              onClick={() => setPayloadOpen((o) => !o)}
+              aria-expanded={payloadOpen}
+              className="flex min-h-12 items-center justify-center rounded-2xl border-2 border-navy/15 bg-white text-sm font-semibold text-navy/70 transition-all active:scale-[0.98] hover:border-navy/30"
+            >
+              {payloadOpen ? "Hide Payload" : "View Payload"}
+            </button>
+            <button
+              onClick={submitInspection}
+              disabled={submitting}
+              className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-navy text-sm font-semibold text-white shadow-md shadow-navy/20 transition-all active:scale-[0.98] hover:bg-navy-deep disabled:opacity-40"
+            >
+              {submitting ? (
+                <>
+                  <span className="size-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  Submitting…
+                </>
+              ) : (
+                "Submit Inspection"
+              )}
+            </button>
+          </div>
+
+          {submitOk && (
+            <p className="anim-pop-fast mt-3 flex items-center gap-1.5 text-sm font-semibold text-status-green">
+              <CheckIcon size={16} /> Submitted to n8n — response logged in
+              console
+            </p>
+          )}
+
+          {payloadOpen && (
+            <pre className="mt-3 max-w-full whitespace-pre-wrap break-all rounded-2xl bg-navy-deep px-4 py-3 font-mono text-[11px] leading-relaxed text-white/90">
+              {JSON.stringify(previewPayload, null, 2)}
+            </pre>
+          )}
+        </section>
       </main>
+
+      {/* Error toast */}
+      {errorToast && (
+        <div className="pointer-events-none fixed bottom-24 left-1/2 z-40 -translate-x-1/2">
+          <div className="anim-pop-fast flex items-center gap-2 rounded-full bg-status-red px-5 py-2.5 text-sm font-medium text-white shadow-lg">
+            ⚠ {errorToast}
+          </div>
+        </div>
+      )}
 
       {/* Bottom action */}
       <footer className="px-5 pb-6 pt-4">

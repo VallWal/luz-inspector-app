@@ -85,6 +85,29 @@ export interface InspectionSubmissionPayload {
   // officially in n8n. The app only shows a local preview in the UI.
 }
 
+/**
+ * Builds the FINAL payload for submission to n8n. Always finalized:
+ * status "Completed", ISO completedAt, durationSeconds startedAt → completedAt.
+ * It is impossible for this to emit status "In Progress" or completedAt: null.
+ * Use this for every real submission; buildSubmissionPayload with
+ * completedAt: null is only for the in-app debug preview.
+ */
+export function buildFinalSubmissionPayload(input: {
+  session: InspectionSession;
+  zones: InspectionZone[];
+  zoneStatuses: ZoneStatus[];
+  zoneDurations: number[];
+  findings: Finding[];
+  /** Epoch ms; defaults to now. */
+  completedAt?: number;
+}): InspectionSubmissionPayload {
+  return buildSubmissionPayload({
+    ...input,
+    completedAt: input.completedAt ?? Date.now(),
+    durationSeconds: null, // ignored — derived from startedAt → completedAt
+  });
+}
+
 export function buildSubmissionPayload(input: {
   session: InspectionSession;
   zones: InspectionZone[];

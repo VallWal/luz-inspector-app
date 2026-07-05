@@ -117,17 +117,22 @@ export default function ReportFindingSheet({ zone, onClose, onSave }: Props) {
 
   const addPhotos = (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    setPhotos((prev) => [
-      ...prev,
-      ...Array.from(files).map(
-        (f): PhotoAttachment => ({
-          localObjectUrl: URL.createObjectURL(f),
-          name: f.name || "photo.jpg",
-          mimeType: f.type || "image/jpeg",
-          sizeBytes: f.size,
-        })
-      ),
-    ]);
+    // IMPORTANT: materialize the FileList NOW, inside the event handler.
+    // FileList is a live object — the caller resets input.value right after
+    // this call, which empties the list. The setPhotos updater runs later
+    // (during the next render), so mapping the FileList inside the updater
+    // would silently produce zero photos.
+    const attachments = Array.from(files).map(
+      (f): PhotoAttachment => ({
+        localObjectUrl: URL.createObjectURL(f),
+        name: f.name || "photo.jpg",
+        mimeType: f.type || "image/jpeg",
+        sizeBytes: f.size,
+      })
+    );
+    // Debug: verify capture/selection reached React state.
+    console.log("Photos added", attachments);
+    setPhotos((prev) => [...prev, ...attachments]);
   };
 
   const removePhoto = (url: string) => {
@@ -220,6 +225,10 @@ export default function ReportFindingSheet({ zone, onClose, onSave }: Props) {
         {/* Evidence — photos are first-class */}
         <p className="mt-5 text-xs font-medium uppercase tracking-wider text-navy/50">
           📷 Evidence
+        </p>
+        {/* TEMP debug: remove once photo flow is verified on device */}
+        <p className="mt-1 text-xs font-medium text-navy/40">
+          Photos selected: {photos.length}
         </p>
         <input
           ref={cameraInputRef}
@@ -385,16 +394,23 @@ export default function ReportFindingSheet({ zone, onClose, onSave }: Props) {
 
         {/* Save */}
         <button
-          onClick={() =>
-            canSave &&
-            onSave({
+          onClick={() => {
+            if (!canSave) return;
+            const draft = {
               healthDimension: dimension,
               severity,
               photos,
               voiceRecording: voice,
               optionalNote: note.trim(),
-            })
-          }
+            };
+            // Debug: verify photo/voice state at the moment of save.
+            console.log("Report Finding → Save", {
+              photoCount: draft.photos.length,
+              photos: draft.photos,
+              voiceRecording: draft.voiceRecording,
+            });
+            onSave(draft);
+          }}
           disabled={!canSave}
           className="mt-4 flex h-14 w-full items-center justify-center rounded-2xl bg-navy text-base font-semibold text-white shadow-md shadow-navy/25 transition-all active:scale-[0.98] disabled:opacity-40"
         >

@@ -1,31 +1,69 @@
+"use client";
+
+import { useMemo } from "react";
 import type { Property } from "../data";
-import type { Finding, ZoneStatus } from "@/types/inspection";
-import type { InspectionSubmissionPayload } from "../lib/payload";
+import type {
+  Finding,
+  InspectionSession,
+  InspectionZone,
+  ZoneStatus,
+} from "@/types/inspection";
+import { buildSubmissionPayload } from "../lib/payload";
 import { formatDuration } from "../lib/duration";
 import { CheckIcon } from "./icons";
 import DevPayloadSection from "./DevPayloadSection";
 
 interface Props {
   property: Property;
+  session: InspectionSession;
+  zones: InspectionZone[];
   zoneStatuses: ZoneStatus[];
+  zoneDurations: number[];
   findings: Finding[];
   durationSeconds: number | null;
-  /** Epoch ms; kept in state for the future n8n submission payload. */
+  /** Epoch ms, set when Complete Inspection was tapped. */
   completedAt: number | null;
-  /** Finalized payload built on Complete Inspection — what n8n will receive. */
-  submissionPayload: InspectionSubmissionPayload | null;
   onDone: () => void;
 }
 
 export default function CompleteScreen({
   property,
+  session,
+  zones,
   zoneStatuses,
+  zoneDurations,
   findings,
   durationSeconds,
-  submissionPayload,
+  completedAt,
   onDone,
 }: Props) {
   const confirmedCount = zoneStatuses.filter((s) => s === "confirmed").length;
+
+  // Derived directly from live state on every render — there is no cached
+  // intermediate payload that could show stale "In Progress" values.
+  // completedAt != null makes buildSubmissionPayload emit status "Completed",
+  // an ISO completedAt and the final startedAt → completedAt duration.
+  const finalPayload = useMemo(
+    () =>
+      buildSubmissionPayload({
+        session,
+        zones,
+        zoneStatuses,
+        zoneDurations,
+        findings,
+        completedAt,
+        durationSeconds,
+      }),
+    [
+      session,
+      zones,
+      zoneStatuses,
+      zoneDurations,
+      findings,
+      completedAt,
+      durationSeconds,
+    ]
+  );
 
   return (
     <div className="flex min-h-full flex-col">
@@ -69,14 +107,12 @@ export default function CompleteScreen({
         </div>
 
         {/* Developer: the finalized JSON exactly as n8n will receive it */}
-        {submissionPayload && (
-          <div className="anim-rise mt-4 w-full text-left">
-            <DevPayloadSection
-              payload={submissionPayload}
-              note='Final payload — status "Completed", completedAt and durationSeconds are set. voiceRecording.localObjectUrl is local preview only; audio upload comes with the backend.'
-            />
-          </div>
-        )}
+        <div className="anim-rise mt-4 w-full text-left">
+          <DevPayloadSection
+            payload={finalPayload}
+            note='Final payload — status "Completed", completedAt and durationSeconds are set. localObjectUrl values are local previews only; file upload comes with the backend.'
+          />
+        </div>
       </main>
 
       {/* Bottom action */}

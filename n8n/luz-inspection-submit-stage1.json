@@ -1,0 +1,65 @@
+{
+  "name": "LUZ - Inspection Submit - Stage 1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "luz-inspection-submit",
+        "responseMode": "responseNode"
+      },
+      "id": "Webhook_LuzInspectionSubmit",
+      "name": "Webhook - Inspection Submit",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $json;\n\nconst dimensions = [\n  'Security & Access',\n  'Water & Humidity',\n  'Utilities & Systems',\n  'Building Condition',\n  'Outdoor Areas'\n];\n\nconst propertyHealth = {};\nconst propertyHealthReasons = {};\n\nfor (const dimension of dimensions) {\n  const findings = (payload.findings || []).filter(\n    f => f.healthDimension === dimension\n  );\n\n  const immediateFindings = findings.filter(f => f.severity === 'immediate');\n  const monitorFindings = findings.filter(f => f.severity === 'monitor');\n\n  if (immediateFindings.length > 0) {\n    propertyHealth[dimension] = 'red';\n    propertyHealthReasons[dimension] = `${immediateFindings.length} immediate action finding(s)`;\n  } else if (monitorFindings.length > 0) {\n    propertyHealth[dimension] = 'yellow';\n    propertyHealthReasons[dimension] = `${monitorFindings.length} monitor finding(s)`;\n  } else {\n    propertyHealth[dimension] = 'green';\n    propertyHealthReasons[dimension] = 'No findings reported';\n  }\n}\n\nreturn [\n  {\n    json: {\n      receivedAt: new Date().toISOString(),\n      schemaVersion: payload.schemaVersion,\n      inspection: payload.inspection,\n      zones: payload.zones || [],\n      findings: payload.findings || [],\n      propertyHealth,\n      propertyHealthReasons\n    }\n  }\n];"
+      },
+      "id": "Code_CalculatePropertyHealth",
+      "name": "Calculate Property Health",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  success: true,\n  message: 'Inspection payload received',\n  inspectionId: $json.inspection?.inspectionId,\n  propertyId: $json.inspection?.propertyId,\n  findingCount: $json.findings?.length || 0,\n  propertyHealth: $json.propertyHealth\n} }}"
+      },
+      "id": "Respond_Success",
+      "name": "Respond - Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [780, 300]
+    }
+  ],
+  "connections": {
+    "Webhook - Inspection Submit": {
+      "main": [
+        [
+          {
+            "node": "Calculate Property Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Property Health": {
+      "main": [
+        [
+          {
+            "node": "Respond - Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
