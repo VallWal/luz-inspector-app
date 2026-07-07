@@ -43,7 +43,8 @@ export default function SummaryScreen({
   onComplete,
 }: Props) {
   const confirmedCount = zoneStatuses.filter((s) => s === "confirmed").length;
-  const issueCount = zoneStatuses.filter((s) => s === "issue").length;
+  // Count actual findings, not just the number of areas that have issues.
+  const issueCount = findings.length;
   const health = healthFromFindings(findings);
 
   // Debug preview while the inspection is still open — status stays
@@ -132,7 +133,7 @@ export default function SummaryScreen({
             <p className="text-2xl font-semibold text-status-yellow">
               {issueCount}
             </p>
-            <p className="text-xs text-white/60">issues</p>
+            <p className="text-xs text-white/60">findings</p>
           </div>
           <div>
             <p className="text-2xl font-semibold">{zones.length}</p>

@@ -19,6 +19,52 @@ export interface SubmissionResult {
   body: string;
 }
 
+/** File extension matching the recorder's actual mime type — iOS Safari
+ * records audio/mp4, Chrome records audio/webm. A wrong extension can break
+ * transcription downstream. */
+function audioExtension(mimeType: string): string {
+  if (mimeType.includes("mp4")) return "m4a";
+  if (mimeType.includes("ogg")) return "ogg";
+  if (mimeType.includes("mpeg")) return "mp3";
+  if (mimeType.includes("wav")) return "wav";
+  return "webm";
+}
+
+/** Max photo edge in px and JPEG quality for client-side compression. Keeps
+ * uploads small (webhook limit) and safely under Airtable's 5 MB/file cap. */
+const PHOTO_MAX_DIMENSION = 1600;
+const PHOTO_JPEG_QUALITY = 0.8;
+
+/** Downscale + re-encode a photo as JPEG on-device. Falls back to the
+ * original blob on any error or if compression wouldn't help. */
+async function compressPhoto(blob: Blob): Promise<Blob> {
+  try {
+    const bitmap = await createImageBitmap(blob, {
+      imageOrientation: "from-image",
+    });
+    const scale = Math.min(
+      1,
+      PHOTO_MAX_DIMENSION / Math.max(bitmap.width, bitmap.height)
+    );
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return blob;
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close();
+    const compressed = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", PHOTO_JPEG_QUALITY)
+    );
+    // Only use the compressed version if it actually helps.
+    return compressed && compressed.size < blob.size ? compressed : blob;
+  } catch {
+    return blob;
+  }
+}
+
 /** Fetch a blob: object URL back into a Blob. Returns null if it's gone
  * (e.g. after a reload) — the submission then simply omits that file. */
 async function blobFromObjectUrl(url: string): Promise<Blob | null> {
@@ -44,10 +90,16 @@ export async function submitInspectionPayload(
       const photo = finding.photos[i];
       const blob = await blobFromObjectUrl(photo.localObjectUrl);
       if (blob) {
+        const compressed = await compressPhoto(blob);
+        const baseName = (photo.name || `photo-${i}`).replace(
+          /\.[A-Za-z0-9]+$/,
+          ""
+        );
+        const isJpeg = compressed.type === "image/jpeg";
         form.append(
           `photo__${finding.findingId}__${i}`,
-          blob,
-          photo.name || `photo-${i}.jpg`
+          compressed,
+          isJpeg ? `${baseName}.jpg` : photo.name || `photo-${i}.jpg`
         );
       }
     }
@@ -56,10 +108,13 @@ export async function submitInspectionPayload(
         finding.voiceRecording.localObjectUrl
       );
       if (blob) {
+        const ext = audioExtension(
+          blob.type || finding.voiceRecording.mimeType || ""
+        );
         form.append(
           `voice__${finding.findingId}`,
           blob,
-          `voice-${finding.findingId}.webm`
+          `voice-${finding.findingId}.${ext}`
         );
       }
     }
