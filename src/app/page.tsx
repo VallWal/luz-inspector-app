@@ -1,7 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { inspector, properties, type Property } from "./data";
+import { useEffect, useRef, useState } from "react";
+import {
+  inspector,
+  properties as mockProperties,
+  setLiveNotes,
+  type Property,
+} from "./data";
+import { fetchAppData } from "./lib/appData";
 import {
   getInspectionConfig,
   getZonesForProperty,
@@ -62,6 +68,22 @@ export default function App() {
   const nextKey = useRef(1);
   const animating = useRef(false);
 
+  // Properties — live from Airtable (via n8n), mock data as offline fallback.
+  const [propertyList, setPropertyList] = useState<Property[]>(mockProperties);
+  useEffect(() => {
+    fetchAppData()
+      .then((data) => {
+        if (data.properties.length > 0) setPropertyList(data.properties);
+        if (data.notes.length > 0) setLiveNotes(data.notes);
+        console.log(
+          `Loaded ${data.properties.length} properties / ${data.notes.length} notes from Airtable`
+        );
+      })
+      .catch((err) =>
+        console.warn("Property fetch failed — using built-in mock data", err)
+      );
+  }, []);
+
   // Inspection session (one active inspection at a time, React state only)
   const [session, setSession] = useState<InspectionSession | null>(null);
   const [zoneStatuses, setZoneStatuses] = useState<ZoneStatus[]>([]);
@@ -107,7 +129,7 @@ export default function App() {
   };
 
   const getProperty = (id: string): Property =>
-    properties.find((p) => p.id === id) ?? properties[0];
+    propertyList.find((p) => p.id === id) ?? propertyList[0];
 
   /** Zones come from the session's inspection type config + property features. */
   const zonesForSession = (s: InspectionSession): InspectionZone[] =>
@@ -223,6 +245,7 @@ export default function App() {
       case "recordEvent":
         return (
           <RecordEventScreen
+            properties={propertyList}
             onBack={() => navigate({ name: "home" }, "back")}
             onDone={() => navigate({ name: "home" }, "fwd")}
           />
@@ -230,6 +253,7 @@ export default function App() {
       case "selectProperty":
         return (
           <SelectPropertyScreen
+            properties={propertyList}
             onBack={() => navigate({ name: "home" }, "back")}
             onSelect={(property) =>
               navigate(

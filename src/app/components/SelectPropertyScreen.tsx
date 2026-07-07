@@ -1,15 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { properties, type Property } from "../data";
+import type { Property } from "../data";
 import { BackButton, ChevronRightIcon } from "./icons";
 
 interface Props {
+  properties: Property[];
   onBack: () => void;
   onSelect: (property: Property) => void;
 }
 
-export default function SelectPropertyScreen({ onBack, onSelect }: Props) {
+export default function SelectPropertyScreen({
+  properties,
+  onBack,
+  onSelect,
+}: Props) {
   const [query, setQuery] = useState("");
 
   const q = query.trim().toLowerCase();

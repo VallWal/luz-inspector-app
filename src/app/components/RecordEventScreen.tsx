@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { properties, type Property } from "../data";
+import type { Property } from "../data";
 import { BackButton, CheckIcon } from "./icons";
 import { submitVoiceEvent } from "../lib/eventSubmission";
 
 interface Props {
+  properties: Property[];
   onBack: () => void;
   onDone: () => void;
 }
@@ -24,7 +25,11 @@ function formatClock(totalSec: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-export default function RecordEventScreen({ onBack, onDone }: Props) {
+export default function RecordEventScreen({
+  properties,
+  onBack,
+  onDone,
+}: Props) {
   // ---- Property selection (optional) ------------------------------------------
   const [propertyId, setPropertyId] = useState<string | null>(null);
   const selected: Property | null =

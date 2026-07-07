@@ -94,9 +94,19 @@ export const propertyNotes: PropertyNote[] = [
   },
 ];
 
+/** Live notes fetched from Airtable via n8n; null until the fetch succeeds. */
+let liveNotes: PropertyNote[] | null = null;
+
+/** Swap the mock notes for live Airtable notes (called once after fetch). */
+export function setLiveNotes(notes: PropertyNote[]) {
+  liveNotes = notes;
+}
+
 /** Notes for one property, in the fixed display order of the three groups. */
 export function notesForProperty(propertyId: string): PropertyNote[] {
-  return propertyNotes.filter((n) => n.propertyId === propertyId);
+  return (liveNotes ?? propertyNotes).filter(
+    (n) => n.propertyId === propertyId
+  );
 }
 
 // ---- Dummy data ----------------------------------------------------------------

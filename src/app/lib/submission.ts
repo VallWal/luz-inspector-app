@@ -5,9 +5,11 @@
 
 import type { InspectionSubmissionPayload } from "./payload";
 
-/** n8n TEST webhook — switch to the production URL when the workflow goes live. */
+/** Production webhook of "Luz - Inspection Submit - CLAUDE" (active). It creates
+ * the Inspection, a linked Property Health snapshot, and one Finding per app
+ * finding in Airtable. */
 export const N8N_WEBHOOK_URL =
-  "https://automation.vallendiz.com/webhook-test/luz-inspection-submit";
+  "https://automation.vallendiz.com/webhook/luz-inspection-submit-claude";
 
 export interface SubmissionResult {
   status: number;
