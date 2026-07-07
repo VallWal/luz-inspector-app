@@ -7,9 +7,15 @@ interface Props {
   session: InspectionSession | null;
   onResume: () => void;
   onStartNew: () => void;
+  onRecordEvent: () => void;
 }
 
-export default function HomeScreen({ session, onResume, onStartNew }: Props) {
+export default function HomeScreen({
+  session,
+  onResume,
+  onStartNew,
+  onRecordEvent,
+}: Props) {
   return (
     <div className="flex min-h-full flex-col">
       {/* Header */}
@@ -56,6 +62,37 @@ export default function HomeScreen({ session, onResume, onStartNew }: Props) {
             className="flex h-16 w-full items-center justify-center gap-2 rounded-2xl bg-navy text-lg font-semibold text-white shadow-md shadow-navy/25 transition-all active:scale-[0.98] hover:bg-navy-deep"
           >
             Start New Inspection
+          </button>
+        </section>
+
+        {/* Record event (voice log) */}
+        <section className="rounded-3xl bg-white px-6 py-6 shadow-sm">
+          <p className="mb-4 text-sm leading-relaxed text-navy/60">
+            Log an access, contractor visit or observation as a quick voice
+            note.
+          </p>
+          <button
+            onClick={onRecordEvent}
+            className="flex h-16 w-full items-center justify-center gap-2.5 rounded-2xl border-2 border-navy bg-white text-lg font-semibold text-navy shadow-sm transition-all active:scale-[0.98] hover:bg-beige-soft"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <rect
+                x="9"
+                y="3"
+                width="6"
+                height="12"
+                rx="3"
+                stroke="currentColor"
+                strokeWidth="1.8"
+              />
+              <path
+                d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+            </svg>
+            Record Event
           </button>
         </section>
       </main>

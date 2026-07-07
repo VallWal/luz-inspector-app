@@ -16,6 +16,7 @@ import type {
 import { buildFinalSubmissionPayload } from "./lib/payload";
 import { submitInspectionPayload } from "./lib/submission";
 import HomeScreen from "./components/HomeScreen";
+import RecordEventScreen from "./components/RecordEventScreen";
 import SelectPropertyScreen from "./components/SelectPropertyScreen";
 import SelectTypeScreen from "./components/SelectTypeScreen";
 import InspectionStartScreen from "./components/InspectionStartScreen";
@@ -27,6 +28,7 @@ import CompleteScreen from "./components/CompleteScreen";
 
 type Screen =
   | { name: "home" }
+  | { name: "recordEvent" }
   | { name: "selectProperty" }
   | { name: "selectType"; propertyId: string }
   | { name: "starting" }
@@ -215,6 +217,14 @@ export default function App() {
             session={session?.status === "In Progress" ? session : null}
             onResume={() => navigate({ name: "inspection" }, "fwd")}
             onStartNew={() => navigate({ name: "selectProperty" }, "fwd")}
+            onRecordEvent={() => navigate({ name: "recordEvent" }, "fwd")}
+          />
+        );
+      case "recordEvent":
+        return (
+          <RecordEventScreen
+            onBack={() => navigate({ name: "home" }, "back")}
+            onDone={() => navigate({ name: "home" }, "fwd")}
           />
         );
       case "selectProperty":
