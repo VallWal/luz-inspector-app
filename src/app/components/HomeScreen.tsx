@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { InspectionSession } from "@/types/inspection";
 import { formatTime } from "../lib/duration";
 import { ChevronRightIcon } from "./icons";
@@ -19,11 +20,31 @@ export default function HomeScreen({
   return (
     <div className="flex min-h-full flex-col">
       {/* Header */}
-      <header className="px-5 pt-10 pb-2">
-        <p className="text-xs font-medium uppercase tracking-wider text-navy/50">
-          Luz Property Care
-        </p>
-        <h1 className="mt-1 text-3xl font-semibold text-navy">Luz Inspector</h1>
+      <header className="px-5 pt-6 pb-2">
+        {/* Brand lockup — same logo, font and colors as the website header */}
+        <div className="flex items-center gap-3">
+          <span className="flex h-11 w-11 shrink-0 overflow-hidden rounded-xl shadow-sm">
+            <Image
+              src="/logo.png"
+              alt="Luz Property Care"
+              width={44}
+              height={44}
+              className="h-full w-full object-cover"
+              priority
+            />
+          </span>
+          <span className="leading-tight">
+            <span className="block font-display text-lg font-semibold tracking-wide text-navy-900">
+              LUZ
+            </span>
+            <span className="block text-[11px] font-semibold uppercase tracking-[0.28em] text-gold-600">
+              Property Care
+            </span>
+          </span>
+        </div>
+        <h1 className="mt-6 text-center text-3xl font-semibold text-navy">
+          LUZ App
+        </h1>
       </header>
 
       <main className="flex flex-1 flex-col gap-4 px-5 pb-8 pt-4">

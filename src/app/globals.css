@@ -10,10 +10,14 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-playfair), ui-serif, Georgia, serif;
 
   /* Luz palette */
   --color-navy: #12253f;
   --color-navy-deep: #0c1a2e;
+  /* Website brand lockup colors (components/Header.tsx on the website) */
+  --color-navy-900: #0f2a43;
+  --color-gold-600: #9c7b3a;
   --color-beige: #efe9df;
   --color-beige-soft: #f8f5ef;
   --color-status-green: #3d8b64;
