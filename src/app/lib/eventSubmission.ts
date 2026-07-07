@@ -4,9 +4,9 @@
 // transcription, AI structuring, Airtable writes, routing to Activity
 // History or Findings — lives in the n8n workflow, never here.
 
-/** n8n TEST webhook — switch to /webhook/luz-voice-event when the workflow goes live. */
+/** Production webhook of the "Luz-app voice" n8n workflow (active). */
 export const N8N_VOICE_EVENT_WEBHOOK_URL =
-  "https://automation.vallendiz.com/webhook-test/luz-voice-event";
+  "https://automation.vallendiz.com/webhook/luz-voice-event";
 
 export interface VoiceEventSubmission {
   /** Recorded audio blob (e.g. audio/webm or audio/mp4, browser-dependent). */
