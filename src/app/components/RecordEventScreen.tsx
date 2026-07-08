@@ -1,9 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Property } from "../data";
+import { inspector, type Property } from "../data";
 import { BackButton, CheckIcon } from "./icons";
 import { submitVoiceEvent } from "../lib/eventSubmission";
+
+interface EventPhotoDraft {
+  file: File;
+  localObjectUrl: string;
+}
 
 interface Props {
   properties: Property[];
@@ -44,6 +49,31 @@ export default function RecordEventScreen({
   const chunksRef = useRef<Blob[]>([]);
   const secondsRef = useRef(0);
   const tickRef = useRef<number | null>(null);
+
+  // ---- Optional photos ------------------------------------------------------------
+  const [photos, setPhotos] = useState<EventPhotoDraft[]>([]);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const libraryInputRef = useRef<HTMLInputElement>(null);
+
+  const addPhotos = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    // Materialize the FileList NOW — it's a live object that empties when the
+    // input value is reset right after this call.
+    const drafts = Array.from(files).map((file) => ({
+      file,
+      localObjectUrl: URL.createObjectURL(file),
+    }));
+    setPhotos((prev) => [...prev, ...drafts]);
+  };
+
+  const removePhoto = (index: number) => {
+    setPhotos((prev) => {
+      const next = [...prev];
+      const [removed] = next.splice(index, 1);
+      if (removed) URL.revokeObjectURL(removed.localObjectUrl);
+      return next;
+    });
+  };
 
   // ---- Submission ---------------------------------------------------------------
   const [submitState, setSubmitState] = useState<
@@ -125,6 +155,11 @@ export default function RecordEventScreen({
       recordedAt: audio.recordedAt,
       propertyId: selected?.id,
       propertyName: selected?.name,
+      createdBy: inspector,
+      photos: photos.map((p, i) => ({
+        blob: p.file,
+        name: p.file.name || `photo-${i}.jpg`,
+      })),
     })
       .then((res) => {
         console.log("Voice event webhook response", res.status, res.body);
@@ -297,6 +332,72 @@ export default function RecordEventScreen({
               )}
             </div>
           )}
+        </section>
+
+        {/* Optional photos */}
+        <section className="rounded-3xl bg-white px-5 py-4 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wider text-navy/50">
+            📷 Photos (optional)
+          </p>
+          {photos.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {photos.map((photo, i) => (
+                <div key={photo.localObjectUrl} className="relative">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={photo.localObjectUrl}
+                    alt={`Photo ${i + 1}`}
+                    className="size-16 rounded-xl object-cover"
+                  />
+                  <button
+                    onClick={() => removePhoto(i)}
+                    aria-label={`Remove photo ${i + 1}`}
+                    className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-navy text-[10px] font-bold text-white shadow"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-3 flex gap-2">
+            <button
+              onClick={() => cameraInputRef.current?.click()}
+              disabled={submitState === "submitting"}
+              className="flex h-11 flex-1 items-center justify-center rounded-2xl border-2 border-navy/15 bg-beige-soft text-sm font-semibold text-navy transition-all active:scale-[0.98] disabled:opacity-50"
+            >
+              📸 Take Photo
+            </button>
+            <button
+              onClick={() => libraryInputRef.current?.click()}
+              disabled={submitState === "submitting"}
+              className="flex h-11 flex-1 items-center justify-center rounded-2xl border-2 border-navy/15 bg-beige-soft text-sm font-semibold text-navy transition-all active:scale-[0.98] disabled:opacity-50"
+            >
+              🖼️ From Library
+            </button>
+          </div>
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => {
+              addPhotos(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          <input
+            ref={libraryInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              addPhotos(e.target.files);
+              e.target.value = "";
+            }}
+          />
         </section>
 
         {/* Upload error */}

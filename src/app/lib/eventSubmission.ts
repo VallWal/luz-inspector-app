@@ -1,12 +1,19 @@
 // ---- n8n voice-event submission -------------------------------------------------
-// The app only captures audio + metadata and ships it to n8n as
-// multipart/form-data (n8n needs the audio binary). All business logic —
-// transcription, AI structuring, Airtable writes, routing to Activity
-// History or Findings — lives in the n8n workflow, never here.
+// The app only captures audio + optional photos + metadata and ships them to
+// n8n as multipart/form-data. All business logic — transcription, AI
+// extraction (Description / Person involved / Type), Airtable writes into the
+// Events table — lives in the "Luz-app voice" n8n workflow, never here.
+
+import { compressPhoto } from "./submission";
 
 /** Production webhook of the "Luz-app voice" n8n workflow (active). */
 export const N8N_VOICE_EVENT_WEBHOOK_URL =
   "https://automation.vallendiz.com/webhook/luz-voice-event";
+
+export interface EventPhoto {
+  blob: Blob;
+  name: string;
+}
 
 export interface VoiceEventSubmission {
   /** Recorded audio blob (e.g. audio/webm or audio/mp4, browser-dependent). */
@@ -18,6 +25,10 @@ export interface VoiceEventSubmission {
   recordedAt: string;
   propertyId?: string;
   propertyName?: string;
+  /** Inspector / user name for the Events "Created by" column. */
+  createdBy?: string;
+  /** Optional photos; compressed on-device before upload. */
+  photos?: EventPhoto[];
 }
 
 export interface SubmissionResult {
@@ -44,6 +55,7 @@ export async function submitVoiceEvent(
   if (submission.propertyId) form.append("propertyId", submission.propertyId);
   if (submission.propertyName)
     form.append("propertyName", submission.propertyName);
+  if (submission.createdBy) form.append("createdBy", submission.createdBy);
   form.append("recordedAt", submission.recordedAt);
   form.append("recordingDuration", String(submission.recordingDuration));
   form.append(
@@ -51,6 +63,21 @@ export async function submitVoiceEvent(
     submission.audio,
     `voice-event.${fileExtension(submission.audioMimeType)}`
   );
+
+  const photos = submission.photos ?? [];
+  for (let i = 0; i < photos.length; i++) {
+    const compressed = await compressPhoto(photos[i].blob);
+    const baseName = (photos[i].name || `photo-${i}`).replace(
+      /\.[A-Za-z0-9]+$/,
+      ""
+    );
+    const isJpeg = compressed.type === "image/jpeg";
+    form.append(
+      `photo_${i}`,
+      compressed,
+      isJpeg ? `${baseName}.jpg` : photos[i].name || `photo-${i}.jpg`
+    );
+  }
 
   // No Content-Type header — the browser sets multipart/form-data with the
   // correct boundary automatically.

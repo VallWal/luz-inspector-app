@@ -36,8 +36,9 @@ const PHOTO_MAX_DIMENSION = 1600;
 const PHOTO_JPEG_QUALITY = 0.8;
 
 /** Downscale + re-encode a photo as JPEG on-device. Falls back to the
- * original blob on any error or if compression wouldn't help. */
-async function compressPhoto(blob: Blob): Promise<Blob> {
+ * original blob on any error or if compression wouldn't help.
+ * Shared with the voice-event submission. */
+export async function compressPhoto(blob: Blob): Promise<Blob> {
   try {
     const bitmap = await createImageBitmap(blob, {
       imageOrientation: "from-image",
