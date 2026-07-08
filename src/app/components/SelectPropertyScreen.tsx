@@ -6,12 +6,15 @@ import { BackButton, ChevronRightIcon } from "./icons";
 
 interface Props {
   properties: Property[];
+  /** True while the live property list is still being fetched. */
+  propertiesLoading?: boolean;
   onBack: () => void;
   onSelect: (property: Property) => void;
 }
 
 export default function SelectPropertyScreen({
   properties,
+  propertiesLoading = false,
   onBack,
   onSelect,
 }: Props) {
@@ -79,7 +82,15 @@ export default function SelectPropertyScreen({
             </div>
           </button>
         ))}
-        {filtered.length === 0 && (
+        {propertiesLoading && (
+          <p className="px-1 pt-2 text-sm text-navy/50">Loading properties…</p>
+        )}
+        {!propertiesLoading && properties.length === 0 && (
+          <p className="px-1 pt-2 text-sm text-navy/50">
+            No properties available
+          </p>
+        )}
+        {!propertiesLoading && properties.length > 0 && filtered.length === 0 && (
           <p className="px-1 pt-2 text-sm text-navy/50">
             No properties match “{query}”.
           </p>

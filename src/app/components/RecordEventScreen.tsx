@@ -12,6 +12,8 @@ interface EventPhotoDraft {
 
 interface Props {
   properties: Property[];
+  /** True while the live property list is still being fetched. */
+  propertiesLoading?: boolean;
   onBack: () => void;
   onDone: () => void;
 }
@@ -32,6 +34,7 @@ function formatClock(totalSec: number): string {
 
 export default function RecordEventScreen({
   properties,
+  propertiesLoading = false,
   onBack,
   onDone,
 }: Props) {
@@ -213,6 +216,12 @@ export default function RecordEventScreen({
           <p className="text-xs font-medium uppercase tracking-wider text-navy/50">
             Property (optional)
           </p>
+          {propertiesLoading && (
+            <p className="mt-3 text-sm text-navy/50">Loading properties…</p>
+          )}
+          {!propertiesLoading && properties.length === 0 && (
+            <p className="mt-3 text-sm text-navy/50">No properties available</p>
+          )}
           <div className="mt-3 flex flex-col gap-2">
             {properties.map((p) => {
               const isSelected = p.id === propertyId;
