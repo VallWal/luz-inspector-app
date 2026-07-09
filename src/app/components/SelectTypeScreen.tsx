@@ -5,14 +5,22 @@ import type { Property } from "../data";
 import { INSPECTION_TYPE_NAMES } from "@/config/inspectionTypes";
 import { BackButton, CheckIcon } from "./icons";
 import PropertyNotes from "./PropertyNotes";
+import OpenFindings from "./OpenFindings";
 
 interface Props {
   property: Property;
+  /** Inspection items fetched from Airtable — Start stays disabled until true. */
+  itemsLoaded: boolean;
   onBack: () => void;
   onStart: (inspectionType: string) => void;
 }
 
-export default function SelectTypeScreen({ property, onBack, onStart }: Props) {
+export default function SelectTypeScreen({
+  property,
+  itemsLoaded,
+  onBack,
+  onStart,
+}: Props) {
   const [type, setType] = useState<string | null>(null);
 
   return (
@@ -44,6 +52,9 @@ export default function SelectTypeScreen({ property, onBack, onStart }: Props) {
       {/* Field guidance before starting the inspection */}
       <PropertyNotes propertyId={property.id} />
 
+      {/* What still requires attention at this property */}
+      <OpenFindings propertyId={property.id} />
+
       {/* Type list */}
       <main className="mx-5 mt-4 flex flex-1 flex-col rounded-3xl bg-white px-6 py-6 shadow-sm">
         <div className="flex flex-col gap-2">
@@ -70,11 +81,11 @@ export default function SelectTypeScreen({ property, onBack, onStart }: Props) {
         {/* Start */}
         <div className="mt-auto pt-6">
           <button
-            onClick={() => type && onStart(type)}
-            disabled={!type}
+            onClick={() => type && itemsLoaded && onStart(type)}
+            disabled={!type || !itemsLoaded}
             className="flex h-16 w-full items-center justify-center gap-2 rounded-2xl bg-navy text-lg font-semibold text-white shadow-md shadow-navy/25 transition-all active:scale-[0.98] hover:bg-navy-deep disabled:opacity-40"
           >
-            Start Inspection
+            {itemsLoaded ? "Start Inspection" : "Loading inspection items…"}
           </button>
         </div>
       </main>

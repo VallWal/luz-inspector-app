@@ -2,22 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  HEALTH_DIMENSIONS,
+  type ChecklistItem,
   type FindingDraft,
-  type HealthDimension,
   type InspectionZone,
   type PhotoAttachment,
   type Severity,
   type VoiceRecording,
 } from "@/types/inspection";
-
-const DIMENSION_EMOJI: Record<HealthDimension, string> = {
-  "Security & Access": "🛡️",
-  "Water & Humidity": "💧",
-  "Utilities & Systems": "⚡",
-  "Building Condition": "🏠",
-  "Outdoor Areas": "🌳",
-};
 
 function formatDuration(totalSec: number): string {
   const m = Math.floor(totalSec / 60);
@@ -27,12 +18,19 @@ function formatDuration(totalSec: number): string {
 
 interface Props {
   zone: InspectionZone;
+  /** Pre-selected inspection item when the sheet is opened from an item row. */
+  preselectedItem: ChecklistItem | null;
   onClose: () => void;
   onSave: (draft: FindingDraft) => void;
 }
 
-export default function ReportFindingSheet({ zone, onClose, onSave }: Props) {
-  const [dimension, setDimension] = useState<HealthDimension | null>(null);
+export default function ReportFindingSheet({
+  zone,
+  preselectedItem,
+  onClose,
+  onSave,
+}: Props) {
+  const [item, setItem] = useState<ChecklistItem | null>(preselectedItem);
   const [severity, setSeverity] = useState<Severity | null>(null);
   const [photos, setPhotos] = useState<PhotoAttachment[]>([]);
   const [voice, setVoice] = useState<VoiceRecording | null>(null);
@@ -165,7 +163,10 @@ export default function ReportFindingSheet({ zone, onClose, onSave }: Props) {
     });
   };
 
-  const canSave = dimension !== null && severity !== null;
+  // The item binds the finding; severity is optional (voice/AI decides).
+  // At least one piece of evidence is required: voice, photo or note.
+  const canSave =
+    item !== null && (voice !== null || photos.length > 0 || note.trim() !== "");
 
   return (
     // Fixed to the viewport: never offset by screen scroll position
@@ -179,44 +180,50 @@ export default function ReportFindingSheet({ zone, onClose, onSave }: Props) {
         <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-navy/15" />
         <h3 className="text-xl font-semibold text-navy">Report Finding</h3>
         <p className="mt-1 text-xs font-medium uppercase tracking-wider text-navy/50">
-          Current Area
+          {zone.title}
         </p>
-        <p className="text-base font-semibold text-navy">{zone.title}</p>
 
-        {/* Affected Property Health Area (fixed across the Luz platform) */}
+        {/* Inspection Item — the finding is bound to it; the category is
+            already known from the current step. */}
         <p className="mt-5 text-xs font-medium uppercase tracking-wider text-navy/50">
-          Affected Property Health Area
+          Inspection Item
         </p>
         <div className="mt-2 flex flex-col gap-2">
-          {HEALTH_DIMENSIONS.map((d) => {
-            const selected = dimension === d;
+          {zone.checklist.map((ci) => {
+            const selected = item?.recordId === ci.recordId;
             return (
               <button
-                key={d}
-                onClick={() => setDimension(d)}
+                key={ci.recordId}
+                onClick={() => setItem(ci)}
                 aria-pressed={selected}
-                className={`flex items-center gap-3 rounded-2xl border-2 px-4 py-3 text-left text-sm font-semibold transition-all active:scale-[0.99] ${
+                className={`flex items-center justify-between gap-3 rounded-2xl border-2 px-4 py-3 text-left text-sm font-semibold transition-all active:scale-[0.99] ${
                   selected
                     ? "border-navy bg-navy text-white shadow-md shadow-navy/20"
                     : "border-navy/10 bg-white text-navy/70 hover:border-navy/25"
                 }`}
               >
-                <span className="text-lg leading-none" aria-hidden>
-                  {DIMENSION_EMOJI[d]}
+                <span className="min-w-0">{ci.label}</span>
+                <span
+                  className={`shrink-0 text-[10px] font-medium ${
+                    selected ? "text-white/60" : "text-navy/40"
+                  }`}
+                >
+                  {ci.itemId}
                 </span>
-                {d}
               </button>
             );
           })}
         </div>
 
-        {/* Severity */}
+        {/* Severity — optional; a severity spoken in the voice note wins. */}
         <p className="mt-5 text-xs font-medium uppercase tracking-wider text-navy/50">
-          Severity
+          Severity <span className="normal-case text-navy/40">(optional)</span>
         </p>
         <div className="mt-2 grid grid-cols-2 gap-3">
           <button
-            onClick={() => setSeverity("monitor")}
+            onClick={() =>
+              setSeverity((s) => (s === "monitor" ? null : "monitor"))
+            }
             className={`rounded-2xl border-2 py-3.5 text-sm font-semibold transition-all ${
               severity === "monitor"
                 ? "border-status-yellow bg-status-yellow-soft text-status-yellow"
@@ -226,7 +233,9 @@ export default function ReportFindingSheet({ zone, onClose, onSave }: Props) {
             🟡 Monitor
           </button>
           <button
-            onClick={() => setSeverity("immediate")}
+            onClick={() =>
+              setSeverity((s) => (s === "immediate" ? null : "immediate"))
+            }
             className={`rounded-2xl border-2 py-3.5 text-sm font-semibold transition-all ${
               severity === "immediate"
                 ? "border-status-red bg-status-red-soft text-status-red"
@@ -236,6 +245,9 @@ export default function ReportFindingSheet({ zone, onClose, onSave }: Props) {
             🔴 Immediate Action
           </button>
         </div>
+        <p className="mt-1.5 text-xs text-navy/45">
+          If the voice note clearly states a severity, it takes precedence.
+        </p>
 
         {/* Evidence — photos are first-class */}
         <p className="mt-5 text-xs font-medium uppercase tracking-wider text-navy/50">
@@ -430,9 +442,11 @@ export default function ReportFindingSheet({ zone, onClose, onSave }: Props) {
         {/* Save */}
         <button
           onClick={() => {
-            if (!canSave) return;
-            const draft = {
-              healthDimension: dimension,
+            if (!canSave || !item) return;
+            const draft: FindingDraft = {
+              inspectionItemRecordId: item.recordId,
+              inspectionItemId: item.itemId,
+              inspectionItem: item.label,
               severity,
               photos,
               voiceRecording: voice,

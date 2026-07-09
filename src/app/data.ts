@@ -94,6 +94,52 @@ export const propertyNotes: PropertyNote[] = [
   },
 ];
 
+// ---- Inspection Items (Airtable is the single source of truth) -----------------
+
+export interface InspectionItem {
+  /** Airtable record id. */
+  recordId: string;
+  /** e.g. "II-001". */
+  itemId: string;
+  healthCategory: string;
+  /** The Inspection Item text. */
+  item: string;
+  guidance: string;
+  /** Inspection type names this item applies to. */
+  appliesTo: string[];
+}
+
+let liveInspectionItems: InspectionItem[] = [];
+
+export function setLiveInspectionItems(items: InspectionItem[]) {
+  liveInspectionItems = items;
+}
+
+export function getInspectionItems(): InspectionItem[] {
+  return liveInspectionItems;
+}
+
+// ---- Open findings (shown before the inspection starts) ------------------------
+
+export interface OpenFinding {
+  findingId: string;
+  propertyId: string;
+  description: string;
+  severity: string;
+  status: string;
+  photoUrl?: string;
+}
+
+let liveOpenFindings: OpenFinding[] = [];
+
+export function setLiveOpenFindings(findings: OpenFinding[]) {
+  liveOpenFindings = findings;
+}
+
+export function openFindingsForProperty(propertyId: string): OpenFinding[] {
+  return liveOpenFindings.filter((f) => f.propertyId === propertyId);
+}
+
 /** Live notes fetched from Airtable via n8n; null until the fetch succeeds. */
 let liveNotes: PropertyNote[] | null = null;
 

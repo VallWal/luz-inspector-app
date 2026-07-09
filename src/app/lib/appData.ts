@@ -4,7 +4,12 @@
 // Property Notes in exactly the shapes the app uses. If the endpoint is
 // unreachable, callers fall back to the built-in mock data.
 
-import type { Property, PropertyNote } from "../data";
+import type {
+  InspectionItem,
+  OpenFinding,
+  Property,
+  PropertyNote,
+} from "../data";
 
 /** Production webhook of "Luz - App Get Properties - CLAUDE" (must be active). */
 export const N8N_APP_DATA_URL =
@@ -13,6 +18,10 @@ export const N8N_APP_DATA_URL =
 export interface AppData {
   properties: Property[];
   notes: PropertyNote[];
+  /** Full Inspection Items table — the source of truth for the flow. */
+  inspectionItems: InspectionItem[];
+  /** Findings with Status != Resolved, across all properties. */
+  openFindings: OpenFinding[];
 }
 
 /** Fetches live properties + notes. Throws on network failure or non-2xx. */
@@ -27,5 +36,9 @@ export async function fetchAppData(): Promise<AppData> {
   return {
     properties: Array.isArray(data.properties) ? data.properties : [],
     notes: Array.isArray(data.notes) ? data.notes : [],
+    inspectionItems: Array.isArray(data.inspectionItems)
+      ? data.inspectionItems
+      : [],
+    openFindings: Array.isArray(data.openFindings) ? data.openFindings : [],
   };
 }

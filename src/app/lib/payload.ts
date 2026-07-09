@@ -1,12 +1,12 @@
-// ---- Inspection submission payload -------------------------------------------
-// The exact JSON that will later be POSTed to n8n on "Complete Inspection".
-// n8n then transcribes voice notes, classifies findings via LLM, computes
-// Property Health and writes to Airtable. No backend yet — this only builds
-// the object so it can be verified in the Summary screen's developer section.
+// ---- Inspection submission payload (v2 — category-driven flow) -----------------
+// The JSON POSTed to n8n on "Complete Inspection". The inspection is navigated
+// by Health Category; every finding is bound to an Airtable Inspection Item.
+// n8n transcribes voice notes, extracts description/area/severity (voice
+// severity wins over the optional manual one, default Monitor), computes
+// Property Health and writes to Airtable.
 
 import type {
   Finding,
-  HealthDimension,
   InspectionSession,
   InspectionStatus,
   InspectionZone,
@@ -15,14 +15,10 @@ import type {
 } from "@/types/inspection";
 
 /** Bump when the payload shape changes; n8n validates against this. */
-export const PAYLOAD_SCHEMA_VERSION = "1.0";
+export const PAYLOAD_SCHEMA_VERSION = "2.0";
 
 export interface PhotoMetadata {
-  /**
-   * Local blob object URL — preview/debugging ONLY. n8n cannot fetch this;
-   * it only exists inside the inspector's browser session. The raw photo
-   * file will be uploaded separately once the backend is implemented.
-   */
+  /** Local blob object URL — preview only; the binary travels as multipart. */
   localObjectUrl: string;
   name: string;
   mimeType: string;
@@ -30,20 +26,17 @@ export interface PhotoMetadata {
 }
 
 export interface VoiceMetadata {
-  /**
-   * Local blob object URL — preview/debugging ONLY. n8n cannot fetch this;
-   * it only exists inside the inspector's browser session. The raw audio
-   * file will be uploaded separately once the backend is implemented.
-   */
+  /** Local blob object URL — preview only; the binary travels as multipart. */
   localObjectUrl: string;
   durationSec: number;
   mimeType: string;
   sizeBytes: number;
 }
 
-export interface PayloadZone {
-  zoneId: string;
-  title: string;
+export interface PayloadCategory {
+  categoryId: string;
+  /** Health Category name, e.g. "Utilities & Systems". */
+  category: string;
   status: ZoneStatus;
   durationSeconds: number;
   findingCount: number;
@@ -52,10 +45,16 @@ export interface PayloadZone {
 export interface PayloadFinding {
   /** Stable id assigned when the finding was created. */
   findingId: string;
-  zoneId: string;
-  zoneTitle: string;
-  healthDimension: HealthDimension;
-  severity: Severity;
+  /** Health Category the finding was raised in. */
+  healthCategory: string;
+  /** Airtable record id of the Inspection Item. */
+  inspectionItemRecordId: string;
+  /** e.g. "II-014". */
+  inspectionItemId: string;
+  /** The Inspection Item text. */
+  inspectionItem: string;
+  /** Optional manual severity; null = let the voice/AI decide. */
+  selectedSeverity: Severity | null;
   /** ISO timestamp of when the finding was captured. */
   timestamp: string;
   optionalNote: string;
@@ -68,8 +67,10 @@ export interface InspectionSubmissionPayload {
   schemaVersion: typeof PAYLOAD_SCHEMA_VERSION;
   inspection: {
     inspectionId: string;
+    /** Airtable Properties record id. */
     propertyId: string;
     propertyName: string;
+    /** One of the four canonical inspection types (matches Airtable). */
     inspectionType: string;
     inspector: string;
     status: InspectionStatus;
@@ -79,18 +80,13 @@ export interface InspectionSubmissionPayload {
     completedAt: string | null;
     durationSeconds: number | null;
   };
-  zones: PayloadZone[];
+  categories: PayloadCategory[];
   findings: PayloadFinding[];
-  // NOTE: no propertyHealthPreview here — Property Health is calculated
-  // officially in n8n. The app only shows a local preview in the UI.
 }
 
 /**
  * Builds the FINAL payload for submission to n8n. Always finalized:
  * status "Completed", ISO completedAt, durationSeconds startedAt → completedAt.
- * It is impossible for this to emit status "In Progress" or completedAt: null.
- * Use this for every real submission; buildSubmissionPayload with
- * completedAt: null is only for the in-app debug preview.
  */
 export function buildFinalSubmissionPayload(input: {
   session: InspectionSession;
@@ -128,12 +124,7 @@ export function buildSubmissionPayload(input: {
     durationSeconds,
   } = input;
 
-  const zoneTitle = (id: string) =>
-    zones.find((z) => z.id === id)?.title ?? id;
-
-  // Finalization is enforced here, not trusted from the caller: as soon as
-  // completedAt is provided, the payload is a final submission — status must
-  // be "Completed" and durationSeconds is derived startedAt → completedAt.
+  // Finalization is enforced here, not trusted from the caller.
   const isFinal = completedAt != null;
 
   return {
@@ -151,19 +142,20 @@ export function buildSubmissionPayload(input: {
         ? Math.max(0, Math.round((completedAt - session.startedAt) / 1000))
         : durationSeconds,
     },
-    zones: zones.map((zone, i) => ({
-      zoneId: zone.id,
-      title: zone.title,
+    categories: zones.map((zone, i) => ({
+      categoryId: zone.id,
+      category: zone.title,
       status: zoneStatuses[i] ?? "pending",
       durationSeconds: zoneDurations[i] ?? 0,
       findingCount: findings.filter((f) => f.zone === zone.id).length,
     })),
     findings: findings.map((f) => ({
       findingId: f.findingId,
-      zoneId: f.zone,
-      zoneTitle: zoneTitle(f.zone),
-      healthDimension: f.healthDimension,
-      severity: f.severity,
+      healthCategory: f.healthCategory,
+      inspectionItemRecordId: f.inspectionItemRecordId,
+      inspectionItemId: f.inspectionItemId,
+      inspectionItem: f.inspectionItem,
+      selectedSeverity: f.severity,
       timestamp: f.timestamp,
       optionalNote: f.optionalNote,
       photoCount: f.photos.length,

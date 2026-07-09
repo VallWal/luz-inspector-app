@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { inspector, setLiveNotes, type Property } from "./data";
+import {
+  inspector,
+  setLiveInspectionItems,
+  setLiveNotes,
+  setLiveOpenFindings,
+  type Property,
+} from "./data";
 import { fetchAppData } from "./lib/appData";
 
 /** Safety fallback only — inspections can only start from a fetched property. */
@@ -15,10 +21,7 @@ const UNKNOWN_PROPERTY: Property = {
   accessNotes: "",
   features: [],
 };
-import {
-  getInspectionConfig,
-  getZonesForProperty,
-} from "@/config/inspectionTypes";
+import { zonesForInspection } from "@/config/inspectionTypes";
 import type {
   Finding,
   FindingDraft,
@@ -78,17 +81,22 @@ export default function App() {
   // Properties — always live from Airtable (via n8n). No hardcoded fallback:
   // null = still loading, [] = fetch failed or no active properties.
   const [propertyList, setPropertyList] = useState<Property[] | null>(null);
+  const [itemsLoaded, setItemsLoaded] = useState(false);
   useEffect(() => {
     fetchAppData()
       .then((data) => {
         setPropertyList(data.properties);
         if (data.notes.length > 0) setLiveNotes(data.notes);
+        setLiveInspectionItems(data.inspectionItems);
+        setLiveOpenFindings(data.openFindings);
+        setItemsLoaded(data.inspectionItems.length > 0);
         console.log(
-          `Loaded ${data.properties.length} properties / ${data.notes.length} notes from Airtable`
+          `Loaded ${data.properties.length} properties / ${data.notes.length} notes / ` +
+            `${data.inspectionItems.length} inspection items / ${data.openFindings.length} open findings`
         );
       })
       .catch((err) => {
-        console.error("Property fetch failed", err);
+        console.error("App data fetch failed", err);
         setPropertyList([]);
       });
   }, []);
@@ -140,12 +148,9 @@ export default function App() {
   const getProperty = (id: string): Property =>
     (propertyList ?? []).find((p) => p.id === id) ?? UNKNOWN_PROPERTY;
 
-  /** Zones come from the session's inspection type config + property features. */
+  /** Category steps from the Airtable inspection items for this type. */
   const zonesForSession = (s: InspectionSession): InspectionZone[] =>
-    getZonesForProperty(
-      getInspectionConfig(s.inspectionType),
-      getProperty(s.propertyId).features
-    );
+    zonesForInspection(s.inspectionType);
 
   /** Close the timing of the current zone (first completion or finding wins). */
   const closeZoneTiming = () => {
@@ -159,6 +164,11 @@ export default function App() {
   // ---- Flow actions --------------------------------------------------------
 
   const startInspection = (property: Property, inspectionType: string) => {
+    // Items come from Airtable — never start with an empty flow.
+    if (zonesForInspection(inspectionType).length === 0) {
+      console.warn("No inspection items loaded for", inspectionType);
+      return;
+    }
     inspectionSeq.current += 1;
     const start = nowMs();
     const newSession: InspectionSession = {
@@ -225,6 +235,7 @@ export default function App() {
       inspectionId: session.inspectionId,
       propertyId: session.propertyId,
       zone: zone.id,
+      healthCategory: zone.title,
       timestamp: new Date().toISOString(),
     };
     // Debug: verify photos/voice survive the sheet → findings hand-off.
@@ -279,6 +290,7 @@ export default function App() {
         return (
           <SelectTypeScreen
             property={property}
+            itemsLoaded={itemsLoaded}
             onBack={() => navigate({ name: "selectProperty" }, "back")}
             onStart={(inspectionType) =>
               startInspection(property, inspectionType)

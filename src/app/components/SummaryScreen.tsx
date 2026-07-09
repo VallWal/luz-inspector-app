@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Property } from "../data";
 import {
-  HEALTH_DIMENSIONS,
+  HEALTH_CATEGORIES,
   healthFromFindings,
   type Finding,
   type InspectionSession,
@@ -203,7 +203,7 @@ export default function SummaryScreen({
             Property Health Preview
           </p>
           <ul className="mt-3 flex flex-col">
-            {HEALTH_DIMENSIONS.map((dimension, i) => {
+            {HEALTH_CATEGORIES.map((dimension, i) => {
               const status = health[dimension];
               return (
                 <li
@@ -267,11 +267,13 @@ export default function SummaryScreen({
                       >
                         {finding.severity === "immediate"
                           ? "Immediate"
-                          : "Monitor"}
+                          : finding.severity === "monitor"
+                            ? "Monitor"
+                            : "Auto (voice)"}
                       </span>
                     </div>
                     <p className="mt-0.5 text-xs text-navy/50">
-                      {finding.healthDimension}
+                      {finding.inspectionItem}
                     </p>
                     {(finding.photos.length > 0 || finding.voiceRecording) && (
                       <p className="mt-1 text-xs font-medium text-navy/60">

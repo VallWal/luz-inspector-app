@@ -1,47 +1,56 @@
-import type { InspectionTypeConfig, InspectionZone } from "@/types/inspection";
-import { regularCheck } from "./regularCheck";
+// ---- Inspection flow configuration -------------------------------------------
+// There are NO hardcoded inspection items here. The Airtable "Inspection
+// Items" table is the single source of truth: items are fetched at app start
+// (lib/appData.ts), filtered by "Applies To" for the selected inspection type
+// and grouped by Health Category. Only the category order and their short
+// reminder lines are defined in the app.
 
-/** Registry of all configured inspection types, keyed by id. */
-export const INSPECTION_TYPES: Record<string, InspectionTypeConfig> = {
-  [regularCheck.id]: regularCheck,
-};
+import { HEALTH_CATEGORIES, type InspectionZone } from "@/types/inspection";
+import { getInspectionItems } from "@/app/data";
 
-/**
- * Inspection types the inspector can start. Types without their own
- * zone config yet fall back to the Regular Check config.
- */
+/** The four inspection types — exactly the Airtable "Inspection Type" and
+ * "Applies To" option names. No mapping layer needed. */
 export const INSPECTION_TYPE_NAMES = [
-  "Regular Check",
-  "Storm Check",
-  "Arrival Preparation",
-  "Departure Reset",
-  "Key Access",
+  "Regular Inspection",
+  "Post-Storm Inspection",
+  "Owner Arrival Preparation",
+  "Owner Departure Reset",
 ] as const;
 
-/**
- * Resolve an inspection type config by id or display title.
- * Unknown types fall back to the Regular Check config so the
- * app always has a valid zone/checklist structure to render.
- */
-export function getInspectionConfig(idOrTitle: string): InspectionTypeConfig {
-  const direct = INSPECTION_TYPES[idOrTitle];
-  if (direct) return direct;
-  const byTitle = Object.values(INSPECTION_TYPES).find(
-    (c) => c.title.toLowerCase() === idOrTitle.toLowerCase()
-  );
-  return byTitle ?? regularCheck;
-}
+/** Short reminder line under each category title. */
+const CATEGORY_REMINDERS: Record<string, string> = {
+  "Utilities & Systems":
+    "Power, water, hot water, internet, climate and pool equipment.",
+  "Access & Security":
+    "Entrances, locks, windows, alarm and any signs of intrusion.",
+  "Water & Humidity": "Leaks, damp, mould, ventilation and standing water.",
+  "Building Interior/Exterior":
+    "Structure, surfaces, cleanliness and signs of pests.",
+  "Outdoor Areas": "Garden, terraces, pool surroundings and boundaries.",
+};
+
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
 /**
- * Zones applicable to a property: zones with `requiresFeature`
- * (e.g. Pool / Garden) are only included when the property has
- * that feature.
+ * The category steps for one inspection: each Health Category with the
+ * Airtable inspection items whose "Applies To" contains the selected type.
+ * Categories without items for this type are skipped.
  */
-export function getZonesForProperty(
-  config: InspectionTypeConfig,
-  features: string[] = []
-): InspectionZone[] {
-  return config.zones.filter(
-    (z) => !z.requiresFeature || features.includes(z.requiresFeature)
+export function zonesForInspection(inspectionType: string): InspectionZone[] {
+  const items = getInspectionItems().filter((i) =>
+    i.appliesTo.includes(inspectionType)
   );
+  return HEALTH_CATEGORIES.map((category) => ({
+    id: slug(category),
+    title: category,
+    reminder: CATEGORY_REMINDERS[category] ?? "",
+    checklist: items
+      .filter((i) => i.healthCategory === category)
+      .map((i) => ({
+        recordId: i.recordId,
+        itemId: i.itemId,
+        label: i.item,
+        guidance: i.guidance,
+      })),
+  })).filter((zone) => zone.checklist.length > 0);
 }
