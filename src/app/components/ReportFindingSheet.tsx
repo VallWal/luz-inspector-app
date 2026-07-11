@@ -2,11 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  type ChecklistItem,
   type FindingDraft,
   type InspectionZone,
   type PhotoAttachment,
-  type Severity,
   type VoiceRecording,
 } from "@/types/inspection";
 
@@ -18,20 +16,18 @@ function formatDuration(totalSec: number): string {
 
 interface Props {
   zone: InspectionZone;
-  /** Pre-selected inspection item when the sheet is opened from an item row. */
-  preselectedItem: ChecklistItem | null;
   onClose: () => void;
   onSave: (draft: FindingDraft) => void;
 }
 
-export default function ReportFindingSheet({
-  zone,
-  preselectedItem,
-  onClose,
-  onSave,
-}: Props) {
-  const [item, setItem] = useState<ChecklistItem | null>(preselectedItem);
-  const [severity, setSeverity] = useState<Severity | null>(null);
+/**
+ * Capture-first finding sheet: voice on top (one tap to record), photos,
+ * a single "Immediate action" toggle and an optional note. The finding is
+ * bound to the current Health Category automatically — the inspection-item
+ * mapping happens in n8n from the voice note (Decision 001).
+ */
+export default function ReportFindingSheet({ zone, onClose, onSave }: Props) {
+  const [immediate, setImmediate] = useState(false);
   const [photos, setPhotos] = useState<PhotoAttachment[]>([]);
   const [voice, setVoice] = useState<VoiceRecording | null>(null);
   const [note, setNote] = useState("");
@@ -110,42 +106,22 @@ export default function ReportFindingSheet({
   };
 
   // ---- Photos (evidence) --------------------------------------------------------
-  // TEMP debug state for verifying picker behavior across iPhones.
-  const [cameraTapped, setCameraTapped] = useState(false);
-  const [libraryTapped, setLibraryTapped] = useState(false);
-  const [lastSelectedCount, setLastSelectedCount] = useState<number | null>(
-    null
-  );
-  const [lastPhotoError, setLastPhotoError] = useState<string | null>(null);
-
   const addPhotos = (files: FileList | null) => {
-    try {
-      if (!files || files.length === 0) {
-        setLastSelectedCount(0);
-        return;
-      }
-      // IMPORTANT: materialize the FileList NOW, inside the event handler.
-      // FileList is a live object — the caller resets input.value right after
-      // this call, which empties the list. The setPhotos updater runs later
-      // (during the next render), so mapping the FileList inside the updater
-      // would silently produce zero photos.
-      const attachments = Array.from(files).map(
-        (f): PhotoAttachment => ({
-          localObjectUrl: URL.createObjectURL(f),
-          name: f.name || "photo.jpg",
-          mimeType: f.type || "image/jpeg",
-          sizeBytes: f.size,
-        })
-      );
-      console.log("Photos added", attachments);
-      setLastSelectedCount(attachments.length);
-      setLastPhotoError(null);
-      setPhotos((prev) => [...prev, ...attachments]);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("Photo selection failed", err);
-      setLastPhotoError(msg);
-    }
+    if (!files || files.length === 0) return;
+    // IMPORTANT: materialize the FileList NOW, inside the event handler.
+    // FileList is a live object — the caller resets input.value right after
+    // this call, which empties the list. The setPhotos updater runs later
+    // (during the next render), so mapping the FileList inside the updater
+    // would silently produce zero photos.
+    const attachments = Array.from(files).map(
+      (f): PhotoAttachment => ({
+        localObjectUrl: URL.createObjectURL(f),
+        name: f.name || "photo.jpg",
+        mimeType: f.type || "image/jpeg",
+        sizeBytes: f.size,
+      })
+    );
+    setPhotos((prev) => [...prev, ...attachments]);
   };
 
   const removePhoto = (url: string) => {
@@ -163,10 +139,8 @@ export default function ReportFindingSheet({
     });
   };
 
-  // The item binds the finding; severity is optional (voice/AI decides).
   // At least one piece of evidence is required: voice, photo or note.
-  const canSave =
-    item !== null && (voice !== null || photos.length > 0 || note.trim() !== "");
+  const canSave = voice !== null || photos.length > 0 || note.trim() !== "";
 
   return (
     // Fixed to the viewport: never offset by screen scroll position
@@ -183,87 +157,76 @@ export default function ReportFindingSheet({
           {zone.title}
         </p>
 
-        {/* Inspection Item — the finding is bound to it; the category is
-            already known from the current step. */}
+        {/* Voice description — the primary capture method, one tap away */}
         <p className="mt-5 text-xs font-medium uppercase tracking-wider text-navy/50">
-          Inspection Item
+          🎤 Voice Description
         </p>
-        <div className="mt-2 flex flex-col gap-2">
-          {zone.checklist.map((ci) => {
-            const selected = item?.recordId === ci.recordId;
-            return (
+        <div className="mt-2 rounded-2xl bg-beige-soft px-4 py-5">
+          {voice ? (
+            <div className="flex items-center gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-navy text-white">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <rect x="9" y="3" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-navy">
+                  Recording · {formatDuration(voice.durationSec)}
+                </p>
+                <audio
+                  controls
+                  src={voice.localObjectUrl}
+                  className="mt-1.5 h-8 w-full"
+                />
+              </div>
               <button
-                key={ci.recordId}
-                onClick={() => setItem(ci)}
-                aria-pressed={selected}
-                className={`flex items-center justify-between gap-3 rounded-2xl border-2 px-4 py-3 text-left text-sm font-semibold transition-all active:scale-[0.99] ${
-                  selected
-                    ? "border-navy bg-navy text-white shadow-md shadow-navy/20"
-                    : "border-navy/10 bg-white text-navy/70 hover:border-navy/25"
+                onClick={deleteRecording}
+                className="flex min-h-11 shrink-0 items-center px-2 text-sm font-semibold text-status-red"
+              >
+                Delete
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center">
+              <button
+                onClick={recording ? stopRecording : startRecording}
+                aria-label={recording ? "Stop recording" : "Start recording"}
+                className={`flex size-20 items-center justify-center rounded-full text-white shadow-lg transition-all active:scale-95 ${
+                  recording
+                    ? "anim-pop-fast bg-status-red shadow-status-red/30"
+                    : "bg-navy shadow-navy/25 hover:bg-navy-deep"
                 }`}
               >
-                <span className="min-w-0">{ci.label}</span>
-                <span
-                  className={`shrink-0 text-[10px] font-medium ${
-                    selected ? "text-white/60" : "text-navy/40"
-                  }`}
-                >
-                  {ci.itemId}
-                </span>
+                {recording ? (
+                  <span className="size-6 rounded-md bg-white" />
+                ) : (
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden>
+                    <rect x="9" y="3" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.8" />
+                    <path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  </svg>
+                )}
               </button>
-            );
-          })}
+              <p className="mt-3 text-sm font-medium text-navy/70">
+                {recording ? (
+                  <span className="font-semibold text-status-red">
+                    Recording… {formatDuration(seconds)}
+                  </span>
+                ) : (
+                  "Tap to describe the finding"
+                )}
+              </p>
+              {micError && (
+                <p className="mt-1 text-xs text-status-red">{micError}</p>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Severity — optional; a severity spoken in the voice note wins. */}
+        {/* Evidence — photos */}
         <p className="mt-5 text-xs font-medium uppercase tracking-wider text-navy/50">
-          Severity <span className="normal-case text-navy/40">(optional)</span>
+          📷 Photos
         </p>
-        <div className="mt-2 grid grid-cols-2 gap-3">
-          <button
-            onClick={() =>
-              setSeverity((s) => (s === "monitor" ? null : "monitor"))
-            }
-            className={`rounded-2xl border-2 py-3.5 text-sm font-semibold transition-all ${
-              severity === "monitor"
-                ? "border-status-yellow bg-status-yellow-soft text-status-yellow"
-                : "border-navy/10 text-navy/60"
-            }`}
-          >
-            🟡 Monitor
-          </button>
-          <button
-            onClick={() =>
-              setSeverity((s) => (s === "immediate" ? null : "immediate"))
-            }
-            className={`rounded-2xl border-2 py-3.5 text-sm font-semibold transition-all ${
-              severity === "immediate"
-                ? "border-status-red bg-status-red-soft text-status-red"
-                : "border-navy/10 text-navy/60"
-            }`}
-          >
-            🔴 Immediate Action
-          </button>
-        </div>
-        <p className="mt-1.5 text-xs text-navy/45">
-          If the voice note clearly states a severity, it takes precedence.
-        </p>
-
-        {/* Evidence — photos are first-class */}
-        <p className="mt-5 text-xs font-medium uppercase tracking-wider text-navy/50">
-          📷 Evidence
-        </p>
-        {/* TEMP debug: remove once photo flow is verified on device */}
-        <p className="mt-1 text-xs font-medium text-navy/40">
-          Camera tapped: {cameraTapped ? "yes" : "no"} · Library tapped:{" "}
-          {libraryTapped ? "yes" : "no"} · Last selection:{" "}
-          {lastSelectedCount ?? "–"} · Total: {photos.length}
-        </p>
-        {lastPhotoError && (
-          <p className="mt-0.5 text-xs font-medium text-status-red">
-            Photo error: {lastPhotoError}
-          </p>
-        )}
         {/*
           iOS Safari reliability: the tap targets are <label htmlFor> elements
           — native label activation opens the picker with no JS click() at
@@ -345,90 +308,58 @@ export default function ReportFindingSheet({
         )}
         <div className="mt-2 grid grid-cols-2 gap-3">
           {/* Real <label htmlFor> tap targets — the browser opens the picker
-              natively on activation; no JS, nothing async in the tap path.
-              onClick below only records debug state and does NOT prevent
-              the native label behavior. */}
+              natively on activation; no JS, nothing async in the tap path. */}
           <label
             htmlFor="camera-input"
-            onClick={() => setCameraTapped(true)}
             className="flex h-14 cursor-pointer select-none flex-col items-center justify-center rounded-2xl border-2 border-dashed border-navy/15 bg-beige-soft text-navy/60 transition-colors hover:border-navy/30 active:scale-[0.98]"
           >
             <span className="text-sm font-semibold">📷 Take Photo</span>
           </label>
           <label
             htmlFor="library-input"
-            onClick={() => setLibraryTapped(true)}
             className="flex h-14 cursor-pointer select-none flex-col items-center justify-center rounded-2xl border-2 border-dashed border-navy/15 bg-beige-soft text-navy/60 transition-colors hover:border-navy/30 active:scale-[0.98]"
           >
             <span className="text-sm font-semibold">🖼️ Choose from Library</span>
           </label>
         </div>
 
-        {/* Voice description — primary documentation method */}
-        <p className="mt-5 text-xs font-medium uppercase tracking-wider text-navy/50">
-          🎤 Voice Description
-        </p>
-        <div className="mt-2 rounded-2xl bg-beige-soft px-4 py-5">
-          {voice ? (
-            <div className="flex items-center gap-3">
-              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-navy text-white">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-                  <rect x="9" y="3" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.8" />
-                  <path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                </svg>
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-navy">
-                  Recording · {formatDuration(voice.durationSec)}
-                </p>
-                <audio
-                  controls
-                  src={voice.localObjectUrl}
-                  className="mt-1.5 h-8 w-full"
-                />
-              </div>
-              <button
-                onClick={deleteRecording}
-                className="flex min-h-11 shrink-0 items-center px-2 text-sm font-semibold text-status-red"
-              >
-                Delete
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center">
-              <button
-                onClick={recording ? stopRecording : startRecording}
-                aria-label={recording ? "Stop recording" : "Start recording"}
-                className={`flex size-20 items-center justify-center rounded-full text-white shadow-lg transition-all active:scale-95 ${
-                  recording
-                    ? "anim-pop-fast bg-status-red shadow-status-red/30"
-                    : "bg-navy shadow-navy/25 hover:bg-navy-deep"
-                }`}
-              >
-                {recording ? (
-                  <span className="size-6 rounded-md bg-white" />
-                ) : (
-                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" aria-hidden>
-                    <rect x="9" y="3" width="6" height="12" rx="3" stroke="currentColor" strokeWidth="1.8" />
-                    <path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                  </svg>
-                )}
-              </button>
-              <p className="mt-3 text-sm font-medium text-navy/70">
-                {recording ? (
-                  <span className="font-semibold text-status-red">
-                    Recording… {formatDuration(seconds)}
-                  </span>
-                ) : (
-                  "Tap to record the finding"
-                )}
-              </p>
-              {micError && (
-                <p className="mt-1 text-xs text-status-red">{micError}</p>
-              )}
-            </div>
-          )}
-        </div>
+        {/* Severity — one toggle. Off = the voice/AI decides (default Monitor). */}
+        <button
+          onClick={() => setImmediate((v) => !v)}
+          aria-pressed={immediate}
+          className={`mt-5 flex min-h-14 w-full items-center justify-between rounded-2xl border-2 px-4 py-3 text-left transition-all active:scale-[0.99] ${
+            immediate
+              ? "border-status-red bg-status-red-soft"
+              : "border-navy/10 bg-white"
+          }`}
+        >
+          <span>
+            <span
+              className={`block text-sm font-semibold ${
+                immediate ? "text-status-red" : "text-navy/70"
+              }`}
+            >
+              🔴 Immediate action
+            </span>
+            <span className="mt-0.5 block text-xs text-navy/45">
+              {immediate
+                ? "Marked as Immediate — overrides the voice note."
+                : "Off = severity comes from your voice note (default Monitor)."}
+            </span>
+          </span>
+          <span
+            className={`ml-3 flex h-7 w-12 shrink-0 items-center rounded-full p-1 transition-colors ${
+              immediate ? "bg-status-red" : "bg-navy/15"
+            }`}
+            aria-hidden
+          >
+            <span
+              className={`size-5 rounded-full bg-white shadow transition-transform ${
+                immediate ? "translate-x-5" : ""
+              }`}
+            />
+          </span>
+        </button>
 
         {/* Optional notes */}
         <textarea
@@ -442,22 +373,17 @@ export default function ReportFindingSheet({
         {/* Save */}
         <button
           onClick={() => {
-            if (!canSave || !item) return;
+            if (!canSave) return;
             const draft: FindingDraft = {
-              inspectionItemRecordId: item.recordId,
-              inspectionItemId: item.itemId,
-              inspectionItem: item.label,
-              severity,
+              // Item mapping is n8n's job (AI, from voice + category).
+              inspectionItemRecordId: null,
+              inspectionItemId: null,
+              inspectionItem: null,
+              severity: immediate ? "immediate" : null,
               photos,
               voiceRecording: voice,
               optionalNote: note.trim(),
             };
-            // Debug: verify photo/voice state at the moment of save.
-            console.log("Report Finding → Save", {
-              photoCount: draft.photos.length,
-              photos: draft.photos,
-              voiceRecording: draft.voiceRecording,
-            });
             onSave(draft);
           }}
           disabled={!canSave}

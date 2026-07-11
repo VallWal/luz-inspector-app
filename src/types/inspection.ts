@@ -77,11 +77,13 @@ export interface VoiceRecording {
 }
 
 /**
- * A finding is raw evidence bound to an Inspection Item. The app knows the
- * property, inspection, type, category and item; the inspector only adds
+ * A finding is raw evidence bound to a Health Category (the current flow
+ * step — the app already knows it, zero extra taps). The inspector only adds
  * voice (primary), photos (optional) and an optional manual severity.
- * Area/location and final severity are extracted from the voice by n8n
- * (voice severity wins over manual; default Monitor).
+ * Description, area/location, final severity AND the inspection-item mapping
+ * are extracted from the voice by n8n (Decision 001: the app captures
+ * evidence, AI creates knowledge). Voice severity wins over manual;
+ * default Monitor.
  */
 export interface Finding {
   /** Stable id assigned at creation, e.g. "fnd-insp-rec…-1-001". */
@@ -91,12 +93,13 @@ export interface Finding {
   /** Category slug (flow step id). */
   zone: string;
   healthCategory: HealthCategory;
-  /** Airtable record id of the Inspection Item this finding was raised from. */
-  inspectionItemRecordId: string;
-  /** Human-readable item id, e.g. "II-014". */
-  inspectionItemId: string;
-  /** The Inspection Item text. */
-  inspectionItem: string;
+  /** OPTIONAL Airtable record id of a related Inspection Item — null lets
+   * n8n's AI map the finding from voice + category. */
+  inspectionItemRecordId: string | null;
+  /** Human-readable item id, e.g. "II-014" — null when not linked in-app. */
+  inspectionItemId: string | null;
+  /** The Inspection Item text — null when not linked in-app. */
+  inspectionItem: string | null;
   /** Manually selected severity — OPTIONAL; null lets the voice/AI decide. */
   severity: Severity | null;
   photos: PhotoAttachment[];

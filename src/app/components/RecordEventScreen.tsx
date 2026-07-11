@@ -40,8 +40,18 @@ export default function RecordEventScreen({
 }: Props) {
   // ---- Property selection (optional) ------------------------------------------
   const [propertyId, setPropertyId] = useState<string | null>(null);
+  const [propertyQuery, setPropertyQuery] = useState("");
   const selected: Property | null =
     properties.find((p) => p.id === propertyId) ?? null;
+
+  const q = propertyQuery.trim().toLowerCase();
+  const filteredProperties = q
+    ? properties.filter((p) =>
+        [p.name, p.code, p.address, p.kind].some((v) =>
+          v.toLowerCase().includes(q)
+        )
+      )
+    : properties;
 
   // ---- Voice recording (same MediaRecorder pattern as ReportFindingSheet) ------
   const [recording, setRecording] = useState(false);
@@ -211,55 +221,75 @@ export default function RecordEventScreen({
       </header>
 
       <main className="flex flex-1 flex-col gap-4 px-5 pb-8 pt-3">
-        {/* Property selector (optional) */}
+        {/* Property selector (optional) — compact: collapses once chosen */}
         <section className="rounded-3xl bg-white px-5 py-4 shadow-sm">
           <p className="text-xs font-medium uppercase tracking-wider text-navy/50">
             Property (optional)
           </p>
-          {propertiesLoading && (
-            <p className="mt-3 text-sm text-navy/50">Loading properties…</p>
+          {selected ? (
+            <div className="mt-3 flex items-center justify-between rounded-2xl border-2 border-navy bg-navy px-4 py-3 text-white">
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold">
+                  {selected.name}
+                </span>
+                <span className="block text-xs text-white/60">
+                  {selected.kind}
+                </span>
+              </span>
+              <button
+                onClick={() => {
+                  setPropertyId(null);
+                  setPropertyQuery("");
+                }}
+                className="ml-3 flex min-h-11 shrink-0 items-center rounded-full bg-white/15 px-3 text-xs font-semibold text-white transition-all active:scale-95"
+              >
+                Change
+              </button>
+            </div>
+          ) : (
+            <>
+              {propertiesLoading && (
+                <p className="mt-3 text-sm text-navy/50">Loading properties…</p>
+              )}
+              {!propertiesLoading && properties.length === 0 && (
+                <p className="mt-3 text-sm text-navy/50">
+                  No properties available
+                </p>
+              )}
+              {properties.length > 0 && (
+                <>
+                  <input
+                    type="search"
+                    value={propertyQuery}
+                    onChange={(e) => setPropertyQuery(e.target.value)}
+                    placeholder="Search property, code or address"
+                    className="mt-3 h-11 w-full rounded-2xl border-2 border-navy/10 bg-white px-4 text-sm text-navy placeholder:text-navy/40 focus:border-navy/40 focus:outline-none"
+                  />
+                  <div className="mt-2 flex max-h-56 flex-col gap-1.5 overflow-y-auto">
+                    {filteredProperties.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => setPropertyId(p.id)}
+                        className="flex min-h-11 items-center justify-between rounded-xl px-3 py-2 text-left transition-colors hover:bg-beige-soft active:bg-beige"
+                      >
+                        <span className="min-w-0 truncate text-sm font-semibold text-navy">
+                          {p.name}
+                        </span>
+                        <span className="ml-3 shrink-0 rounded-full bg-beige px-2.5 py-0.5 text-xs font-medium text-navy/70">
+                          {p.code}
+                        </span>
+                      </button>
+                    ))}
+                    {filteredProperties.length === 0 && (
+                      <p className="px-1 py-2 text-sm text-navy/50">
+                        No properties match “{propertyQuery}”.
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+            </>
           )}
-          {!propertiesLoading && properties.length === 0 && (
-            <p className="mt-3 text-sm text-navy/50">No properties available</p>
-          )}
-          <div className="mt-3 flex flex-col gap-2">
-            {properties.map((p) => {
-              const isSelected = p.id === propertyId;
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => setPropertyId(isSelected ? null : p.id)}
-                  className={`flex items-center justify-between rounded-2xl border-2 px-4 py-3 text-left transition-all active:scale-[0.98] ${
-                    isSelected
-                      ? "border-navy bg-navy text-white"
-                      : "border-navy/10 bg-white text-navy"
-                  }`}
-                >
-                  <span className="min-w-0">
-                    <span className="block text-sm font-semibold">
-                      {p.name}
-                    </span>
-                    <span
-                      className={`block text-xs ${
-                        isSelected ? "text-white/60" : "text-navy/50"
-                      }`}
-                    >
-                      {p.kind}
-                    </span>
-                  </span>
-                  <span
-                    className={`ml-3 shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                      isSelected
-                        ? "bg-white/15 text-white"
-                        : "bg-beige text-navy/70"
-                    }`}
-                  >
-                    {p.code}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
         </section>
 
         {/* Recorder */}

@@ -49,14 +49,8 @@ export default function SelectTypeScreen({
         <p className="mt-0.5 text-sm text-white/60">{property.address}</p>
       </section>
 
-      {/* Field guidance before starting the inspection */}
-      <PropertyNotes propertyId={property.id} />
-
-      {/* What still requires attention at this property */}
-      <OpenFindings propertyId={property.id} />
-
-      {/* Type list */}
-      <main className="mx-5 mt-4 flex flex-1 flex-col rounded-3xl bg-white px-6 py-6 shadow-sm">
+      {/* Type list + Start — the actual decision comes first */}
+      <main className="mx-5 mt-4 flex flex-col rounded-3xl bg-white px-6 py-6 shadow-sm">
         <div className="flex flex-col gap-2">
           {INSPECTION_TYPE_NAMES.map((name) => {
             const selected = type === name;
@@ -79,7 +73,7 @@ export default function SelectTypeScreen({
         </div>
 
         {/* Start */}
-        <div className="mt-auto pt-6">
+        <div className="pt-6">
           <button
             onClick={() => type && itemsLoaded && onStart(type)}
             disabled={!type || !itemsLoaded}
@@ -89,6 +83,10 @@ export default function SelectTypeScreen({
           </button>
         </div>
       </main>
+
+      {/* Property briefing — read before walking in */}
+      <OpenFindings propertyId={property.id} />
+      <PropertyNotes propertyId={property.id} />
 
       <div className="pb-7" />
     </div>

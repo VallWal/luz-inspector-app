@@ -29,8 +29,7 @@ import type {
   InspectionZone,
   ZoneStatus,
 } from "@/types/inspection";
-import { buildFinalSubmissionPayload } from "./lib/payload";
-import { submitInspectionPayload } from "./lib/submission";
+import { clearDraft, loadDraft, saveDraft } from "./lib/draftStore";
 import HomeScreen from "./components/HomeScreen";
 import RecordEventScreen from "./components/RecordEventScreen";
 import SelectPropertyScreen from "./components/SelectPropertyScreen";
@@ -38,7 +37,6 @@ import SelectTypeScreen from "./components/SelectTypeScreen";
 import InspectionStartScreen from "./components/InspectionStartScreen";
 import InspectionScreen from "./components/InspectionScreen";
 import SummaryScreen from "./components/SummaryScreen";
-import CompleteScreen from "./components/CompleteScreen";
 
 // ---- Navigation ------------------------------------------------------------
 
@@ -49,8 +47,7 @@ type Screen =
   | { name: "selectType"; propertyId: string }
   | { name: "starting" }
   | { name: "inspection" }
-  | { name: "summary" }
-  | { name: "complete" };
+  | { name: "summary" };
 
 type Anim =
   | "in-fwd"
@@ -82,26 +79,9 @@ export default function App() {
   // null = still loading, [] = fetch failed or no active properties.
   const [propertyList, setPropertyList] = useState<Property[] | null>(null);
   const [itemsLoaded, setItemsLoaded] = useState(false);
-  useEffect(() => {
-    fetchAppData()
-      .then((data) => {
-        setPropertyList(data.properties);
-        if (data.notes.length > 0) setLiveNotes(data.notes);
-        setLiveInspectionItems(data.inspectionItems);
-        setLiveOpenFindings(data.openFindings);
-        setItemsLoaded(data.inspectionItems.length > 0);
-        console.log(
-          `Loaded ${data.properties.length} properties / ${data.notes.length} notes / ` +
-            `${data.inspectionItems.length} inspection items / ${data.openFindings.length} open findings`
-        );
-      })
-      .catch((err) => {
-        console.error("App data fetch failed", err);
-        setPropertyList([]);
-      });
-  }, []);
 
-  // Inspection session (one active inspection at a time, React state only)
+  // Inspection session (one active inspection at a time). Persisted to
+  // IndexedDB after every change so a reload/crash never loses work.
   const [session, setSession] = useState<InspectionSession | null>(null);
   const [zoneStatuses, setZoneStatuses] = useState<ZoneStatus[]>([]);
   const [zoneIndex, setZoneIndex] = useState(0);
@@ -111,8 +91,6 @@ export default function App() {
   const findingSeq = useRef(0);
 
   // Duration tracking
-  const [completedAt, setCompletedAt] = useState<number | null>(null);
-  const [durationSeconds, setDurationSeconds] = useState<number | null>(null);
   const [zoneStartedAt, setZoneStartedAt] = useState<number | null>(null);
   const [zoneDurations, setZoneDurations] = useState<number[]>([]);
   const [summaryElapsedSec, setSummaryElapsedSec] = useState<number | null>(
@@ -120,6 +98,40 @@ export default function App() {
   );
 
   const nowMs = () => new Date().getTime();
+
+  // App data fetch + draft restore. The draft is only restored AFTER the
+  // inspection items are loaded — the flow's zones are built from them.
+  useEffect(() => {
+    fetchAppData()
+      .then(async (data) => {
+        setPropertyList(data.properties);
+        if (data.notes.length > 0) setLiveNotes(data.notes);
+        setLiveInspectionItems(data.inspectionItems);
+        setLiveOpenFindings(data.openFindings);
+        setItemsLoaded(data.inspectionItems.length > 0);
+        // Restore an interrupted inspection (reload, crash, phone lock).
+        const draft = await loadDraft();
+        if (draft && data.inspectionItems.length > 0) {
+          setSession(draft.session);
+          setZoneStatuses(draft.zoneStatuses);
+          setZoneIndex(draft.zoneIndex);
+          setZoneDurations(draft.zoneDurations);
+          setFindings(draft.findings);
+          findingSeq.current = draft.findings.length;
+          setZoneStartedAt(nowMs());
+        }
+      })
+      .catch((err) => {
+        console.error("App data fetch failed", err);
+        setPropertyList([]);
+      });
+  }, []);
+
+  // Persist the in-progress inspection on every change (best-effort).
+  useEffect(() => {
+    if (!session || session.status !== "In Progress") return;
+    saveDraft({ session, zoneStatuses, zoneIndex, zoneDurations, findings });
+  }, [session, zoneStatuses, zoneIndex, zoneDurations, findings]);
 
   const navigate = (screen: Screen, dir: "fwd" | "back" | "fade") => {
     if (animating.current) return;
@@ -172,7 +184,9 @@ export default function App() {
     inspectionSeq.current += 1;
     const start = nowMs();
     const newSession: InspectionSession = {
-      inspectionId: `insp-${property.id}-${inspectionSeq.current}`,
+      // startedAt makes the id unique even across app reloads (n8n also
+      // dedupes on this id before creating records).
+      inspectionId: `insp-${property.id}-${start}-${inspectionSeq.current}`,
       propertyId: property.id,
       propertyName: property.name,
       inspectionType,
@@ -180,13 +194,13 @@ export default function App() {
       startedAt: start,
       status: "In Progress",
     };
+    // Starting a new inspection replaces any previous draft.
+    clearDraft();
     setSession(newSession);
     setZoneStatuses(zonesForSession(newSession).map(() => "pending"));
     setZoneIndex(0);
     setFindings([]);
     findingSeq.current = 0;
-    setCompletedAt(null);
-    setDurationSeconds(null);
     setSummaryElapsedSec(null);
     setZoneStartedAt(start);
     setZoneDurations(zonesForSession(newSession).map(() => 0));
@@ -238,14 +252,6 @@ export default function App() {
       healthCategory: zone.title,
       timestamp: new Date().toISOString(),
     };
-    // Debug: verify photos/voice survive the sheet → findings hand-off.
-    console.log("Finding stored", {
-      findingId: finding.findingId,
-      zone: finding.zone,
-      photoCount: finding.photos.length,
-      photos: finding.photos,
-      voiceRecording: finding.voiceRecording,
-    });
     setFindings((prev) => [...prev, finding]);
   };
 
@@ -359,56 +365,10 @@ export default function App() {
             elapsedSeconds={summaryElapsedSec}
             zoneDurations={zoneDurations}
             onBack={() => navigate({ name: "inspection" }, "back")}
-            onComplete={() => {
-              // Finalize the inspection. The Complete screen derives the
-              // final payload from these values — completedAt != null forces
-              // status "Completed" inside buildSubmissionPayload.
-              const end = nowMs();
-              const finalDuration = Math.round(
-                (end - session.startedAt) / 1000
-              );
-              const finalSession: InspectionSession = {
-                ...session,
-                status: "Completed",
-              };
-              setCompletedAt(end);
-              setDurationSeconds(finalDuration);
-              setSession(finalSession);
-              // Build the finalized payload and send it to the n8n webhook.
-              const payload = buildFinalSubmissionPayload({
-                session: finalSession,
-                zones: zonesForSession(finalSession),
-                zoneStatuses,
-                zoneDurations,
-                findings,
-                completedAt: end,
-              });
-              console.log("Final submission payload", payload);
-              submitInspectionPayload(payload)
-                .then((res) =>
-                  console.log("n8n webhook response", res.status, res.body)
-                )
-                .catch((err) =>
-                  console.error("Inspection submission failed", err)
-                );
-              navigate({ name: "complete" }, "fwd");
-            }}
-          />
-        );
-      }
-      case "complete": {
-        if (!session) return null;
-        return (
-          <CompleteScreen
-            property={getProperty(session.propertyId)}
-            session={session}
-            zones={zonesForSession(session)}
-            zoneStatuses={zoneStatuses}
-            zoneDurations={zoneDurations}
-            findings={findings}
-            durationSeconds={durationSeconds}
-            completedAt={completedAt}
-            onDone={() => {
+            // Called only after a CONFIRMED (2xx) save — the summary screen
+            // owns submission and retry; a failed upload never loses work.
+            onFinished={() => {
+              clearDraft();
               setSession(null);
               navigate({ name: "home" }, "fwd");
             }}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { Property } from "../data";
 import {
   HEALTH_CATEGORIES,
@@ -11,12 +11,12 @@ import {
   type ZoneStatus,
 } from "@/types/inspection";
 import { formatDuration } from "../lib/duration";
-import {
-  buildFinalSubmissionPayload,
-  buildSubmissionPayload,
-} from "../lib/payload";
+import { buildFinalSubmissionPayload } from "../lib/payload";
 import { submitInspectionPayload } from "../lib/submission";
 import { BackButton, CheckIcon } from "./icons";
+import DevPayloadSection from "./DevPayloadSection";
+
+type SubmitState = "idle" | "sending" | "success" | "error";
 
 interface Props {
   property: Property;
@@ -28,9 +28,16 @@ interface Props {
   elapsedSeconds: number | null;
   zoneDurations: number[];
   onBack: () => void;
-  onComplete: () => void;
+  /** Called after a CONFIRMED save + "Return Home" — clears the session. */
+  onFinished: () => void;
 }
 
+/**
+ * Review + completion in ONE screen. "Complete Inspection" builds the final
+ * payload, submits it to n8n and shows the real result: Sending… / Saved /
+ * Failed with Retry. The session (and the persisted draft) are only discarded
+ * after a confirmed 2xx — a failed upload never loses an inspection.
+ */
 export default function SummaryScreen({
   property,
   session,
@@ -40,67 +47,122 @@ export default function SummaryScreen({
   elapsedSeconds,
   zoneDurations,
   onBack,
-  onComplete,
+  onFinished,
 }: Props) {
   const confirmedCount = zoneStatuses.filter((s) => s === "confirmed").length;
   // Count actual findings, not just the number of areas that have issues.
   const issueCount = findings.length;
   const health = healthFromFindings(findings);
 
-  // Debug preview while the inspection is still open — status stays
-  // "In Progress" here; the final payload is built on Complete Inspection.
-  const previewPayload = useMemo(
+  const [submitState, setSubmitState] = useState<SubmitState>("idle");
+  const [finalDurationSec, setFinalDurationSec] = useState<number | null>(null);
+  const [lastPayload, setLastPayload] = useState<ReturnType<
+    typeof buildFinalSubmissionPayload
+  > | null>(null);
+
+  // Developer payload viewer — only with ?dev=1 in the URL.
+  const devMode = useMemo(
     () =>
-      buildSubmissionPayload({
-        session,
-        zones,
-        zoneStatuses,
-        zoneDurations,
-        findings,
-        completedAt: null,
-        durationSeconds: elapsedSeconds,
-      }),
-    [session, zones, zoneStatuses, zoneDurations, findings, elapsedSeconds]
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("dev") === "1",
+    []
   );
 
-  // ---- Developer: view + submit to the n8n test webhook --------------------
-  const [payloadOpen, setPayloadOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [submitOk, setSubmitOk] = useState(false);
-  const [errorToast, setErrorToast] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!errorToast) return;
-    const t = setTimeout(() => setErrorToast(null), 3200);
-    return () => clearTimeout(t);
-  }, [errorToast]);
-
-  const submitInspection = async () => {
-    if (submitting) return;
-    setSubmitting(true);
-    setSubmitOk(false);
-    // Always finalized at press time: status "Completed", ISO completedAt,
-    // durationSeconds derived startedAt → completedAt. Never "In Progress".
+  const submit = async () => {
+    if (submitState === "sending" || submitState === "success") return;
+    setSubmitState("sending");
+    // Finalized at press time: status "Completed", ISO completedAt,
+    // durationSeconds derived startedAt → completedAt.
+    const completedAt = Date.now();
     const payload = buildFinalSubmissionPayload({
       session,
       zones,
       zoneStatuses,
       zoneDurations,
       findings,
+      completedAt,
     });
-    console.log("Submitting inspection to n8n", payload);
+    setLastPayload(payload);
+    setFinalDurationSec(
+      Math.max(0, Math.round((completedAt - session.startedAt) / 1000))
+    );
     try {
-      const result = await submitInspectionPayload(payload);
-      console.log("n8n webhook response", result.status, result.body);
-      setSubmitOk(true);
+      await submitInspectionPayload(payload);
+      setSubmitState("success");
     } catch (err) {
       console.error("Inspection submission failed", err);
-      setErrorToast("Submission failed — see console");
-    } finally {
-      setSubmitting(false);
+      setSubmitState("error");
     }
   };
 
+  // ---- Saved — confirmation state (replaces the old Complete screen) ----------
+  if (submitState === "success") {
+    return (
+      <div className="flex min-h-full flex-col">
+        <main className="flex flex-1 flex-col items-center justify-center px-8 text-center">
+          <div className="relative flex items-center justify-center">
+            <span className="anim-ring absolute size-28 rounded-full bg-status-green/30" />
+            <span className="anim-ring-late absolute size-28 rounded-full bg-status-green/20" />
+            <div className="anim-pop relative flex size-28 items-center justify-center rounded-full bg-status-green text-white shadow-lg shadow-status-green/30">
+              <CheckIcon size={52} />
+            </div>
+          </div>
+          <h1 className="anim-rise mt-8 text-2xl font-semibold text-navy">
+            Inspection Complete
+          </h1>
+          <p className="anim-rise mt-2 text-sm text-navy/60">
+            Saved — findings are being processed
+          </p>
+          <p className="anim-rise mt-1 text-sm text-navy/50">
+            {property.name} · {property.code}
+          </p>
+
+          <div className="anim-rise mt-8 grid w-full grid-cols-3 gap-3">
+            <div className="rounded-3xl bg-white px-3 py-4 shadow-sm">
+              <p className="text-xl font-semibold text-status-green">
+                {confirmedCount}
+              </p>
+              <p className="mt-0.5 text-xs text-navy/50">confirmed</p>
+            </div>
+            <div className="rounded-3xl bg-white px-3 py-4 shadow-sm">
+              <p className="text-xl font-semibold text-status-yellow">
+                {issueCount}
+              </p>
+              <p className="mt-0.5 text-xs text-navy/50">findings</p>
+            </div>
+            <div className="rounded-3xl bg-white px-3 py-4 shadow-sm">
+              <p className="text-xl font-semibold text-navy">
+                {finalDurationSec != null
+                  ? formatDuration(finalDurationSec)
+                  : "—"}
+              </p>
+              <p className="mt-0.5 text-xs text-navy/50">duration</p>
+            </div>
+          </div>
+
+          {devMode && lastPayload && (
+            <div className="anim-rise mt-4 w-full text-left">
+              <DevPayloadSection
+                payload={lastPayload}
+                note="Final payload as submitted to n8n."
+              />
+            </div>
+          )}
+        </main>
+
+        <footer className="px-5 pb-6 pt-4">
+          <button
+            onClick={onFinished}
+            className="flex h-16 w-full items-center justify-center gap-2 rounded-2xl bg-navy text-lg font-semibold text-white shadow-md shadow-navy/25 transition-all active:scale-[0.98] hover:bg-navy-deep"
+          >
+            Return Home
+          </button>
+        </footer>
+      </div>
+    );
+  }
+
+  // ---- Review state ------------------------------------------------------------
   return (
     <div className="flex min-h-full flex-col">
       {/* Top navigation */}
@@ -267,14 +329,9 @@ export default function SummaryScreen({
                       >
                         {finding.severity === "immediate"
                           ? "Immediate"
-                          : finding.severity === "monitor"
-                            ? "Monitor"
-                            : "Auto (voice)"}
+                          : "Auto (voice)"}
                       </span>
                     </div>
-                    <p className="mt-0.5 text-xs text-navy/50">
-                      {finding.inspectionItem}
-                    </p>
                     {(finding.photos.length > 0 || finding.voiceRecording) && (
                       <p className="mt-1 text-xs font-medium text-navy/60">
                         {finding.photos.length > 0 &&
@@ -303,67 +360,44 @@ export default function SummaryScreen({
             </ul>
           </section>
         )}
-
-        {/* Developer: view payload + submit to the n8n test webhook */}
-        <section className="rounded-3xl border border-dashed border-navy/15 bg-beige-soft px-6 py-4">
-          <p className="text-xs font-medium uppercase tracking-wider text-navy/50">
-            Developer
-          </p>
-          <div className="mt-2.5 grid grid-cols-2 gap-3">
-            <button
-              onClick={() => setPayloadOpen((o) => !o)}
-              aria-expanded={payloadOpen}
-              className="flex min-h-12 items-center justify-center rounded-2xl border-2 border-navy/15 bg-white text-sm font-semibold text-navy/70 transition-all active:scale-[0.98] hover:border-navy/30"
-            >
-              {payloadOpen ? "Hide Payload" : "View Payload"}
-            </button>
-            <button
-              onClick={submitInspection}
-              disabled={submitting}
-              className="flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-navy text-sm font-semibold text-white shadow-md shadow-navy/20 transition-all active:scale-[0.98] hover:bg-navy-deep disabled:opacity-40"
-            >
-              {submitting ? (
-                <>
-                  <span className="size-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                  Submitting…
-                </>
-              ) : (
-                "Submit Inspection"
-              )}
-            </button>
-          </div>
-
-          {submitOk && (
-            <p className="anim-pop-fast mt-3 flex items-center gap-1.5 text-sm font-semibold text-status-green">
-              <CheckIcon size={16} /> Submitted to n8n — response logged in
-              console
-            </p>
-          )}
-
-          {payloadOpen && (
-            <pre className="mt-3 max-w-full whitespace-pre-wrap break-all rounded-2xl bg-navy-deep px-4 py-3 font-mono text-[11px] leading-relaxed text-white/90">
-              {JSON.stringify(previewPayload, null, 2)}
-            </pre>
-          )}
-        </section>
       </main>
 
-      {/* Error toast */}
-      {errorToast && (
-        <div className="pointer-events-none fixed bottom-24 left-1/2 z-40 -translate-x-1/2">
-          <div className="anim-pop-fast flex items-center gap-2 rounded-full bg-status-red px-5 py-2.5 text-sm font-medium text-white shadow-lg">
-            ⚠ {errorToast}
-          </div>
+      {/* Submission failed */}
+      {submitState === "error" && (
+        <div className="mx-5 mb-2 rounded-2xl border-2 border-status-red/30 bg-status-red-soft px-4 py-3">
+          <p className="text-sm font-semibold text-status-red">
+            ⚠ Could not save the inspection
+          </p>
+          <p className="mt-0.5 text-xs text-navy/60">
+            Nothing is lost — your inspection stays on this device. Check the
+            connection and try again.
+          </p>
         </div>
       )}
 
       {/* Bottom action */}
-      <footer className="px-5 pb-6 pt-4">
+      <footer className="px-5 pb-6 pt-2">
         <button
-          onClick={onComplete}
-          className="flex h-16 w-full items-center justify-center gap-2 rounded-2xl bg-status-green text-lg font-semibold text-white shadow-md shadow-status-green/25 transition-all active:scale-[0.98]"
+          onClick={submit}
+          disabled={submitState === "sending"}
+          className={`flex h-16 w-full items-center justify-center gap-2 rounded-2xl text-lg font-semibold text-white shadow-md transition-all active:scale-[0.98] disabled:opacity-60 ${
+            submitState === "error"
+              ? "bg-status-red shadow-status-red/25"
+              : "bg-status-green shadow-status-green/25"
+          }`}
         >
-          <CheckIcon /> Complete Inspection
+          {submitState === "sending" ? (
+            <>
+              <span className="size-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+              Saving inspection…
+            </>
+          ) : submitState === "error" ? (
+            <>↻ Retry Save</>
+          ) : (
+            <>
+              <CheckIcon /> Complete Inspection
+            </>
+          )}
         </button>
       </footer>
     </div>

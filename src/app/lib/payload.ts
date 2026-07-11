@@ -1,6 +1,7 @@
-// ---- Inspection submission payload (v2 — category-driven flow) -----------------
+// ---- Inspection submission payload (v2.1 — category-driven flow) ---------------
 // The JSON POSTed to n8n on "Complete Inspection". The inspection is navigated
-// by Health Category; every finding is bound to an Airtable Inspection Item.
+// by Health Category; a finding is bound to its category. The Inspection Item
+// link is OPTIONAL (null = n8n's AI maps it from voice + category).
 // n8n transcribes voice notes, extracts description/area/severity (voice
 // severity wins over the optional manual one, default Monitor), computes
 // Property Health and writes to Airtable.
@@ -14,8 +15,9 @@ import type {
   ZoneStatus,
 } from "@/types/inspection";
 
-/** Bump when the payload shape changes; n8n validates against this. */
-export const PAYLOAD_SCHEMA_VERSION = "2.0";
+/** Bump when the payload shape changes; n8n validates against this.
+ * 2.1: inspectionItem* fields are nullable — the AI maps items in n8n. */
+export const PAYLOAD_SCHEMA_VERSION = "2.1";
 
 export interface PhotoMetadata {
   /** Local blob object URL — preview only; the binary travels as multipart. */
@@ -47,12 +49,13 @@ export interface PayloadFinding {
   findingId: string;
   /** Health Category the finding was raised in. */
   healthCategory: string;
-  /** Airtable record id of the Inspection Item. */
-  inspectionItemRecordId: string;
-  /** e.g. "II-014". */
-  inspectionItemId: string;
-  /** The Inspection Item text. */
-  inspectionItem: string;
+  /** Airtable record id of a related Inspection Item — null lets the AI
+   * map the finding from voice + category in n8n. */
+  inspectionItemRecordId: string | null;
+  /** e.g. "II-014" — null when not linked in-app. */
+  inspectionItemId: string | null;
+  /** The Inspection Item text — null when not linked in-app. */
+  inspectionItem: string | null;
   /** Optional manual severity; null = let the voice/AI decide. */
   selectedSeverity: Severity | null;
   /** ISO timestamp of when the finding was captured. */

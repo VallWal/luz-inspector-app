@@ -16,17 +16,12 @@ const ADVANCE_DELAY_MS = 950;
 const MAX_VISIBLE_OBSERVE_ITEMS = 5;
 
 /**
- * The category's inspection items (from Airtable) with their guidance.
- * Each item has a flag button that opens the Report Finding sheet
- * pre-bound to that item. Collapses beyond 5 items.
+ * The category's inspection items (from Airtable) — read-only guidance the
+ * inspector reads while walking the category. Findings are reported via the
+ * single Report Finding action; the AI maps them to items in n8n.
+ * Collapses beyond 5 items.
  */
-function InspectionItemsList({
-  items,
-  onReport,
-}: {
-  items: ChecklistItem[];
-  onReport: (item: ChecklistItem) => void;
-}) {
+function InspectionItemsList({ items }: { items: ChecklistItem[] }) {
   const [expanded, setExpanded] = useState(false);
   const overflow = items.length > MAX_VISIBLE_OBSERVE_ITEMS;
   const visible =
@@ -37,31 +32,20 @@ function InspectionItemsList({
       <p className="text-xs font-medium uppercase tracking-wider text-navy/50">
         Inspection points
       </p>
-      <ul className="mt-2.5 flex flex-col gap-2">
-        {visible.map((item) => (
+      <ul className="mt-2.5 flex flex-col">
+        {visible.map((item, i) => (
           <li
             key={item.recordId}
-            className="flex items-start justify-between gap-3 rounded-2xl bg-beige-soft px-4 py-3"
+            className={`py-2.5 ${i > 0 ? "border-t border-navy/5" : ""}`}
           >
-            <div className="min-w-0">
-              <p className="text-sm font-semibold leading-snug text-navy">
-                {item.label}
+            <p className="text-sm font-semibold leading-snug text-navy">
+              {item.label}
+            </p>
+            {item.guidance && (
+              <p className="mt-1 text-xs leading-snug text-navy/55">
+                {item.guidance}
               </p>
-              {item.guidance && (
-                <p className="mt-1 text-xs leading-snug text-navy/55">
-                  {item.guidance}
-                </p>
-              )}
-            </div>
-            <button
-              onClick={() => onReport(item)}
-              aria-label={`Report finding for: ${item.label}`}
-              className="flex size-11 shrink-0 items-center justify-center rounded-xl text-status-red transition-all active:scale-95"
-            >
-              <span className="flex size-8 items-center justify-center rounded-lg border border-status-red/30 bg-status-red-soft text-sm">
-                ⚠
-              </span>
-            </button>
+            )}
           </li>
         ))}
       </ul>
@@ -117,7 +101,6 @@ export default function InspectionScreen({
   onBack,
 }: Props) {
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [sheetItem, setSheetItem] = useState<ChecklistItem | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [advancing, setAdvancing] = useState(false);
   /** Direction of the last area change — picks the slide animation. */
@@ -279,23 +262,26 @@ export default function InspectionScreen({
 
         <p className="mt-3 text-sm leading-relaxed text-navy/60">{zone.reminder}</p>
 
-        {/* Inspection items from Airtable (guidance, not tick boxes) */}
-        <InspectionItemsList
-          key={zone.id}
-          items={zone.checklist}
-          onReport={(item) => {
-            if (advancing) return;
-            setSheetItem(item);
-            setSheetOpen(true);
-          }}
-        />
+        {/* Inspection items from Airtable — static guidance to read */}
+        <InspectionItemsList key={zone.id} items={zone.checklist} />
 
         <div className="mt-auto pt-8">
+          {/* Report Finding — available on every area, including completed
+              ones revisited via the progress dots. Reporting and completing
+              are not alternatives: report first, then complete the area. */}
+          <button
+            onClick={() => setSheetOpen(true)}
+            disabled={advancing}
+            className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl border-2 border-status-red/30 bg-status-red-soft text-base font-semibold text-status-red transition-all active:scale-[0.98] hover:border-status-red/50 disabled:opacity-40"
+          >
+            ⚠ {zoneFindingCount > 0 ? "Report Another Finding" : "Report Finding"}
+          </button>
+
           {/* Primary action */}
           <button
             onClick={confirmZone}
             disabled={advancing || zoneStatus === "confirmed"}
-            className={`flex h-16 w-full items-center justify-center gap-2 rounded-2xl text-lg font-semibold shadow-md transition-all active:scale-[0.98] ${
+            className={`mt-3 flex h-16 w-full items-center justify-center gap-2 rounded-2xl text-lg font-semibold shadow-md transition-all active:scale-[0.98] ${
               zoneStatus === "confirmed" || (advancing && zoneStatus === "issue")
                 ? "bg-status-green text-white shadow-status-green/25"
                 : "bg-navy text-white shadow-navy/25 hover:bg-navy-deep disabled:opacity-40"
@@ -303,29 +289,6 @@ export default function InspectionScreen({
           >
             <CheckIcon />{" "}
             {zoneStatus === "confirmed" ? "Area Completed" : "Complete Area"}
-          </button>
-
-          {/* Divider */}
-          <div className="my-5 flex items-center gap-4">
-            <div className="h-px flex-1 bg-navy/10" />
-            <span className="text-xs font-medium uppercase tracking-wider text-navy/40">
-              or
-            </span>
-            <div className="h-px flex-1 bg-navy/10" />
-          </div>
-
-          {/* Secondary action */}
-          {/* Findings can be added to any area, including completed ones
-              revisited via the progress dots. */}
-          <button
-            onClick={() => {
-              setSheetItem(null);
-              setSheetOpen(true);
-            }}
-            disabled={advancing}
-            className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl border-2 border-status-red/30 bg-status-red-soft text-base font-semibold text-status-red transition-all active:scale-[0.98] hover:border-status-red/50 disabled:opacity-40"
-          >
-            ⚠ {zoneFindingCount > 0 ? "Report Another Finding" : "Report Finding"}
           </button>
 
           {/* Tertiary action: intentionally skip this area. Counts as
@@ -397,7 +360,6 @@ export default function InspectionScreen({
       {sheetOpen && (
         <ReportFindingSheet
           zone={zone}
-          preselectedItem={sheetItem}
           onClose={() => setSheetOpen(false)}
           onSave={saveFinding}
         />
