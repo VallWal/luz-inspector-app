@@ -37,6 +37,7 @@ import SelectTypeScreen from "./components/SelectTypeScreen";
 import InspectionStartScreen from "./components/InspectionStartScreen";
 import InspectionScreen from "./components/InspectionScreen";
 import SummaryScreen from "./components/SummaryScreen";
+import PassportScreen from "./components/passport/PassportScreen";
 
 // ---- Navigation ------------------------------------------------------------
 
@@ -45,6 +46,7 @@ type Screen =
   | { name: "recordEvent" }
   | { name: "selectProperty" }
   | { name: "selectType"; propertyId: string }
+  | { name: "passport"; propertyId: string }
   | { name: "starting" }
   | { name: "inspection" }
   | { name: "summary" };
@@ -300,6 +302,24 @@ export default function App() {
             onBack={() => navigate({ name: "selectProperty" }, "back")}
             onStart={(inspectionType) =>
               startInspection(property, inspectionType)
+            }
+            onStartPassport={() =>
+              navigate({ name: "passport", propertyId: property.id }, "fwd")
+            }
+          />
+        );
+      }
+      case "passport": {
+        const property = getProperty(screen.propertyId);
+        return (
+          <PassportScreen
+            property={property}
+            inspector={inspector}
+            onExit={() =>
+              navigate(
+                { name: "selectType", propertyId: property.id },
+                "back"
+              )
             }
           />
         );

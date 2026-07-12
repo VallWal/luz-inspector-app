@@ -13,6 +13,8 @@ interface Props {
   itemsLoaded: boolean;
   onBack: () => void;
   onStart: (inspectionType: string) => void;
+  /** Opens the Property Passport capture flow for this property. */
+  onStartPassport: () => void;
 }
 
 export default function SelectTypeScreen({
@@ -20,6 +22,7 @@ export default function SelectTypeScreen({
   itemsLoaded,
   onBack,
   onStart,
+  onStartPassport,
 }: Props) {
   const [type, setType] = useState<string | null>(null);
 
@@ -83,6 +86,23 @@ export default function SelectTypeScreen({
           </button>
         </div>
       </main>
+
+      {/* Property Passport — a different activity with its own flow */}
+      <section className="mx-5 mt-3 rounded-3xl bg-white px-6 py-5 shadow-sm">
+        <p className="text-xs font-medium uppercase tracking-wider text-navy/50">
+          Property Passport
+        </p>
+        <p className="mt-1.5 text-sm leading-relaxed text-navy/60">
+          Collect or update the permanent property record — specs, utilities,
+          appliances, contacts, keys and baseline photos.
+        </p>
+        <button
+          onClick={onStartPassport}
+          className="mt-3 flex h-14 w-full items-center justify-center gap-2 rounded-2xl border-2 border-navy bg-white text-base font-semibold text-navy transition-all active:scale-[0.98] hover:bg-beige-soft"
+        >
+          📘 Open Passport Capture
+        </button>
+      </section>
 
       {/* Property briefing — read before walking in */}
       <OpenFindings propertyId={property.id} />
