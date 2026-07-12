@@ -24,6 +24,8 @@ interface Props {
   zones: InspectionZone[];
   zoneStatuses: ZoneStatus[];
   findings: Finding[];
+  /** Open findings from earlier inspections verified as fixed. */
+  resolvedFindings: { recordId: string; findingId: string }[];
   /** Elapsed seconds so far, computed when the summary is opened. */
   elapsedSeconds: number | null;
   zoneDurations: number[];
@@ -44,6 +46,7 @@ export default function SummaryScreen({
   zones,
   zoneStatuses,
   findings,
+  resolvedFindings,
   elapsedSeconds,
   zoneDurations,
   onBack,
@@ -80,6 +83,7 @@ export default function SummaryScreen({
       zoneStatuses,
       zoneDurations,
       findings,
+      resolvedFindings,
       completedAt,
     });
     setLastPayload(payload);
@@ -257,6 +261,12 @@ export default function SummaryScreen({
               );
             })}
           </ul>
+          {resolvedFindings.length > 0 && (
+            <p className="mt-3 border-t border-navy/5 pt-3 text-sm font-medium text-status-green">
+              ✓ {resolvedFindings.length} open finding
+              {resolvedFindings.length === 1 ? "" : "s"} verified as fixed
+            </p>
+          )}
         </section>
 
         {/* Property health preview */}

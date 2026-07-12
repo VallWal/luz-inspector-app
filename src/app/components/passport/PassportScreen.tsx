@@ -98,6 +98,7 @@ export default function PassportScreen({ property, inspector, onExit }: Props) {
       seed("appliance", data.appliances);
       seed("contact", data.contacts);
       seed("key", data.keys);
+      seed("note", data.notes);
       setItems(existing);
       setSpecs({ ...data.specs, heroPhoto: null });
       setSpecsChanged(false);
@@ -463,6 +464,35 @@ export default function PassportScreen({ property, inspector, onExit }: Props) {
           </span>
           <span className="text-navy/30">›</span>
         </button>
+
+        {/* Property Notes — optional, typically filled at the end */}
+        {(() => {
+          const cfg = INVENTORY_CONFIGS.note;
+          const all = items.filter((i) => i.kind === "note");
+          const fresh = all.filter(
+            (i) => i.recordId === null || i.dirty || i.photos.length > 0
+          ).length;
+          return (
+            <button
+              onClick={() => setSection("note")}
+              className="flex items-center justify-between rounded-3xl bg-white px-5 py-4 text-left shadow-sm active:scale-[0.99]"
+            >
+              <span>
+                <span className="block text-base font-semibold text-navy">
+                  {cfg.emoji} {cfg.title}{" "}
+                  <span className="text-xs font-medium text-navy/40">
+                    optional
+                  </span>
+                </span>
+                <span className="mt-0.5 block text-xs text-navy/55">
+                  {all.length === 0 ? "none recorded" : `${all.length} recorded`}
+                  {fresh > 0 ? ` · ${fresh} new/edited` : ""}
+                </span>
+              </span>
+              <span className="text-navy/30">›</span>
+            </button>
+          );
+        })()}
 
         {/* Quick photo from the hub — tag later in Baseline Photos */}
         <input

@@ -3,11 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import {
   inspector,
+  openFindingsForProperty,
+  removeLiveOpenFinding,
   setLiveInspectionItems,
   setLiveNotes,
   setLiveOpenFindings,
   type Property,
 } from "./data";
+import { removeOpenFindingFromCache } from "./lib/appData";
 import { fetchAppData, type AppData } from "./lib/appData";
 
 /** Safety fallback only — inspections can only start from a fetched property. */
@@ -88,6 +91,8 @@ export default function App() {
   const [zoneStatuses, setZoneStatuses] = useState<ZoneStatus[]>([]);
   const [zoneIndex, setZoneIndex] = useState(0);
   const [findings, setFindings] = useState<Finding[]>([]);
+  /** Open findings (record ids) marked "Fixed" during this inspection. */
+  const [resolvedFindingIds, setResolvedFindingIds] = useState<string[]>([]);
   const inspectionSeq = useRef(0);
   /** Per-inspection counter so findingIds stay stable regardless of array order. */
   const findingSeq = useRef(0);
@@ -138,6 +143,7 @@ export default function App() {
           setZoneIndex(draft.zoneIndex);
           setZoneDurations(draft.zoneDurations);
           setFindings(draft.findings);
+          setResolvedFindingIds(draft.resolvedFindingIds);
           findingSeq.current = draft.findings.length;
           setZoneStartedAt(nowMs());
         }
@@ -151,8 +157,15 @@ export default function App() {
   // Persist the in-progress inspection on every change (best-effort).
   useEffect(() => {
     if (!session || session.status !== "In Progress") return;
-    saveDraft({ session, zoneStatuses, zoneIndex, zoneDurations, findings });
-  }, [session, zoneStatuses, zoneIndex, zoneDurations, findings]);
+    saveDraft({
+      session,
+      zoneStatuses,
+      zoneIndex,
+      zoneDurations,
+      findings,
+      resolvedFindingIds,
+    });
+  }, [session, zoneStatuses, zoneIndex, zoneDurations, findings, resolvedFindingIds]);
 
   const navigate = (screen: Screen, dir: "fwd" | "back" | "fade") => {
     if (animating.current) return;
@@ -221,6 +234,7 @@ export default function App() {
     setZoneStatuses(zonesForSession(newSession).map(() => "pending"));
     setZoneIndex(0);
     setFindings([]);
+    setResolvedFindingIds([]);
     findingSeq.current = 0;
     setSummaryElapsedSec(null);
     setZoneStartedAt(start);
@@ -371,6 +385,15 @@ export default function App() {
               findings.filter((f) => f.zone === currentZoneId).length
             }
             findings={findings}
+            followUps={openFindingsForProperty(session.propertyId)}
+            resolvedFindingIds={resolvedFindingIds}
+            onToggleResolved={(recordId) =>
+              setResolvedFindingIds((prev) =>
+                prev.includes(recordId)
+                  ? prev.filter((id) => id !== recordId)
+                  : [...prev, recordId]
+              )
+            }
             onConfirmZone={confirmZone}
             onMarkNotApplicable={markZoneNotApplicable}
             onSaveFinding={saveFinding}
@@ -396,6 +419,9 @@ export default function App() {
       }
       case "summary": {
         if (!session) return null;
+        const resolvedFindings = openFindingsForProperty(session.propertyId)
+          .filter((f) => resolvedFindingIds.includes(f.recordId))
+          .map((f) => ({ recordId: f.recordId, findingId: f.findingId }));
         return (
           <SummaryScreen
             property={getProperty(session.propertyId)}
@@ -403,12 +429,17 @@ export default function App() {
             zones={zonesForSession(session)}
             zoneStatuses={zoneStatuses}
             findings={findings}
+            resolvedFindings={resolvedFindings}
             elapsedSeconds={summaryElapsedSec}
             zoneDurations={zoneDurations}
             onBack={() => navigate({ name: "inspection" }, "back")}
             // Called only after a CONFIRMED (2xx) save — the summary screen
             // owns submission and retry; a failed upload never loses work.
             onFinished={() => {
+              for (const r of resolvedFindings) {
+                removeLiveOpenFinding(r.recordId);
+                removeOpenFindingFromCache(r.recordId);
+              }
               clearDraft();
               setSession(null);
               navigate({ name: "home" }, "fwd");

@@ -6,6 +6,7 @@
 import {
   APPLIANCE_TYPES,
   CONTACT_TYPES,
+  NOTE_TYPES,
   UTILITY_TYPES,
   type InventoryKind,
 } from "@/types/passport";
@@ -89,6 +90,22 @@ export const INVENTORY_CONFIGS: Record<InventoryKind, InventoryConfig> = {
       { key: "keyTag", label: "Key Tag", placeholder: "e.g. K-01 Main door" },
       { key: "storageLocation", label: "Storage Location" },
       { key: "notes", label: "Notes" },
+    ],
+  },
+  note: {
+    kind: "note",
+    title: "Property Notes",
+    emoji: "📝",
+    addLabel: "Add Note",
+    types: NOTE_TYPES,
+    hasPhotos: true,
+    aiExtract: false,
+    fields: [
+      {
+        key: "summary",
+        label: "Note",
+        placeholder: "e.g. Key box at side gate, code 4471",
+      },
     ],
   },
 };

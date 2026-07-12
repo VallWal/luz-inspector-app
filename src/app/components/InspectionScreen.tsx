@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { Property } from "../data";
+import {
+  findingCategoryToHealthCategory,
+  type OpenFinding,
+  type Property,
+} from "../data";
 import type {
   ChecklistItem,
   Finding,
@@ -74,6 +78,11 @@ interface Props {
   zoneFindingCount: number;
   /** All findings of the session — used to color the area progress dots. */
   findings: Finding[];
+  /** Open findings from earlier inspections (follow-ups, shown per category). */
+  followUps: OpenFinding[];
+  /** Record ids marked as fixed in this session (toggle, sent on submit). */
+  resolvedFindingIds: string[];
+  onToggleResolved: (recordId: string) => void;
   onConfirmZone: () => void;
   onMarkNotApplicable: () => void;
   onSaveFinding: (draft: FindingDraft) => void;
@@ -92,6 +101,9 @@ export default function InspectionScreen({
   zoneStatuses,
   zoneFindingCount,
   findings,
+  followUps,
+  resolvedFindingIds,
+  onToggleResolved,
   onConfirmZone,
   onMarkNotApplicable,
   onSaveFinding,
@@ -261,6 +273,67 @@ export default function InspectionScreen({
         </div>
 
         <p className="mt-3 text-sm leading-relaxed text-navy/60">{zone.reminder}</p>
+
+        {/* Follow-ups: open findings of THIS category from earlier
+            inspections — verify fixes where you're standing. Toggled marks
+            travel with the inspection submit. */}
+        {(() => {
+          const zoneFollowUps = followUps.filter(
+            (f) => findingCategoryToHealthCategory(f.category) === zone.title
+          );
+          if (zoneFollowUps.length === 0) return null;
+          return (
+            <div className="mt-4">
+              <p className="text-xs font-medium uppercase tracking-wider text-navy/50">
+                Follow-up · still open here
+              </p>
+              <ul className="mt-2 flex flex-col gap-2">
+                {zoneFollowUps.map((f) => {
+                  const fixed = resolvedFindingIds.includes(f.recordId);
+                  return (
+                    <li
+                      key={f.recordId}
+                      className={`rounded-2xl border-2 px-4 py-3 ${
+                        fixed
+                          ? "border-status-green/30 bg-status-green-soft"
+                          : "border-status-yellow/30 bg-status-yellow-soft"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p
+                            className={`text-sm leading-snug ${
+                              fixed
+                                ? "text-navy/50 line-through"
+                                : "text-navy/80"
+                            }`}
+                          >
+                            {f.description || "No description"}
+                          </p>
+                          <p className="mt-0.5 text-[11px] font-medium text-navy/40">
+                            {f.severity || "—"} · {f.findingId}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => onToggleResolved(f.recordId)}
+                          disabled={advancing}
+                          aria-pressed={fixed}
+                          className={`flex h-9 shrink-0 items-center gap-1 rounded-xl px-3 text-xs font-semibold transition-all active:scale-95 ${
+                            fixed
+                              ? "bg-status-green text-white"
+                              : "border-2 border-status-green/30 bg-white text-status-green"
+                          }`}
+                        >
+                          <CheckIcon size={13} /> {fixed ? "Fixed" : "Fixed?"}
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          );
+        })()}
 
         {/* Inspection items from Airtable — static guidance to read */}
         <InspectionItemsList key={zone.id} items={zone.checklist} />

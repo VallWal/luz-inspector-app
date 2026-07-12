@@ -78,6 +78,21 @@ function shape(data: Record<string, unknown>): AppData {
   };
 }
 
+/** Remove a resolved finding from the cached payload so a reload within the
+ * fresh-window doesn't resurrect it. Best-effort. */
+export function removeOpenFindingFromCache(recordId: string) {
+  try {
+    const cached = readCache();
+    if (!cached) return;
+    cached.data.openFindings = cached.data.openFindings.filter(
+      (f) => f.recordId !== recordId
+    );
+    localStorage.setItem(CACHE_KEY, JSON.stringify(cached));
+  } catch {
+    // best-effort
+  }
+}
+
 let inFlight: Promise<AppData> | null = null;
 
 async function requestAppData(): Promise<AppData> {

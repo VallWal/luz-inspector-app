@@ -122,11 +122,16 @@ export function getInspectionItems(): InspectionItem[] {
 // ---- Open findings (shown before the inspection starts) ------------------------
 
 export interface OpenFinding {
+  /** Airtable record id — used for status updates. */
+  recordId: string;
+  /** Business id, e.g. "FND-014". */
   findingId: string;
   propertyId: string;
   description: string;
   severity: string;
   status: string;
+  /** Findings.Category (note: "Building Condition" ↔ health "Building Interior/Exterior"). */
+  category: string;
   photoUrl?: string;
 }
 
@@ -138,6 +143,22 @@ export function setLiveOpenFindings(findings: OpenFinding[]) {
 
 export function openFindingsForProperty(propertyId: string): OpenFinding[] {
   return liveOpenFindings.filter((f) => f.propertyId === propertyId);
+}
+
+/** Drop a finding from the in-memory list after it was resolved. */
+export function removeLiveOpenFinding(recordId: string) {
+  liveOpenFindings = liveOpenFindings.filter((f) => f.recordId !== recordId);
+}
+
+/**
+ * Maps a Findings.Category value to the health-category flow step title
+ * ("Building Condition" is the Findings vocabulary for "Building
+ * Interior/Exterior" — exact strings per the frozen schema).
+ */
+export function findingCategoryToHealthCategory(category: string): string {
+  return category === "Building Condition"
+    ? "Building Interior/Exterior"
+    : category;
 }
 
 /** Live notes fetched from Airtable via n8n; null until the fetch succeeds. */

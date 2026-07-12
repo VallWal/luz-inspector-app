@@ -56,7 +56,7 @@ export default function SelectTypeScreen({
           (Property Notes incl. codes/instructions), know what's open, THEN
           choose the inspection type. */}
       <PropertyNotes propertyId={property.id} />
-      <OpenFindings propertyId={property.id} />
+      <OpenFindings propertyId={property.id} propertyName={property.name} />
 
       {/* Type list + Start */}
       <main className="mx-5 mt-4 flex flex-col rounded-3xl bg-white px-6 py-6 shadow-sm">

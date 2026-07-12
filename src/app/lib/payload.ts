@@ -16,8 +16,9 @@ import type {
 } from "@/types/inspection";
 
 /** Bump when the payload shape changes; n8n validates against this.
- * 2.1: inspectionItem* fields are nullable — the AI maps items in n8n. */
-export const PAYLOAD_SCHEMA_VERSION = "2.1";
+ * 2.1: inspectionItem* fields are nullable — the AI maps items in n8n.
+ * 2.2: findingUpdates — open findings verified as fixed during the visit. */
+export const PAYLOAD_SCHEMA_VERSION = "2.2";
 
 export interface PhotoMetadata {
   /** Local blob object URL — preview only; the binary travels as multipart. */
@@ -66,6 +67,15 @@ export interface PayloadFinding {
   voiceRecording: VoiceMetadata | null;
 }
 
+/** An existing open finding the inspector verified as fixed on-site. */
+export interface PayloadFindingUpdate {
+  /** Airtable record id of the Finding. */
+  recordId: string;
+  /** Business id, e.g. "FND-014". */
+  findingId: string;
+  newStatus: "Resolved";
+}
+
 export interface InspectionSubmissionPayload {
   schemaVersion: typeof PAYLOAD_SCHEMA_VERSION;
   inspection: {
@@ -85,6 +95,8 @@ export interface InspectionSubmissionPayload {
   };
   categories: PayloadCategory[];
   findings: PayloadFinding[];
+  /** Open findings from earlier inspections verified as fixed during this one. */
+  findingUpdates: PayloadFindingUpdate[];
 }
 
 /**
@@ -97,6 +109,8 @@ export function buildFinalSubmissionPayload(input: {
   zoneStatuses: ZoneStatus[];
   zoneDurations: number[];
   findings: Finding[];
+  /** Open findings verified as fixed during this inspection. */
+  resolvedFindings?: { recordId: string; findingId: string }[];
   /** Epoch ms; defaults to now. */
   completedAt?: number;
 }): InspectionSubmissionPayload {
@@ -113,6 +127,8 @@ export function buildSubmissionPayload(input: {
   zoneStatuses: ZoneStatus[];
   zoneDurations: number[];
   findings: Finding[];
+  /** Open findings verified as fixed during this inspection. */
+  resolvedFindings?: { recordId: string; findingId: string }[];
   /** Epoch ms — null while the inspection is still open. */
   completedAt: number | null;
   durationSeconds: number | null;
@@ -123,6 +139,7 @@ export function buildSubmissionPayload(input: {
     zoneStatuses,
     zoneDurations,
     findings,
+    resolvedFindings = [],
     completedAt,
     durationSeconds,
   } = input;
@@ -176,6 +193,11 @@ export function buildSubmissionPayload(input: {
             sizeBytes: f.voiceRecording.sizeBytes,
           }
         : null,
+    })),
+    findingUpdates: resolvedFindings.map((r) => ({
+      recordId: r.recordId,
+      findingId: r.findingId,
+      newStatus: "Resolved" as const,
     })),
   };
 }

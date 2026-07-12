@@ -48,6 +48,8 @@ export interface InspectionDraft {
   zoneIndex: number;
   zoneDurations: number[];
   findings: Finding[];
+  /** Open findings (record ids) marked as fixed during this inspection. */
+  resolvedFindingIds: string[];
   /** Epoch ms of the last persist — shown on the resume card if wanted. */
   savedAt: number;
 }
@@ -149,6 +151,7 @@ export async function saveDraft(draft: Omit<InspectionDraft, "savedAt">) {
       zoneStatuses: draft.zoneStatuses,
       zoneIndex: draft.zoneIndex,
       zoneDurations: draft.zoneDurations,
+      resolvedFindingIds: draft.resolvedFindingIds ?? [],
       savedAt: Date.now(),
       findings: draft.findings.map(
         (f): StoredFinding => ({
@@ -234,6 +237,7 @@ export async function loadDraft(): Promise<InspectionDraft | null> {
       zoneIndex: stored.zoneIndex,
       zoneDurations: stored.zoneDurations,
       findings,
+      resolvedFindingIds: stored.resolvedFindingIds ?? [],
       savedAt: stored.savedAt,
     };
   } catch (err) {

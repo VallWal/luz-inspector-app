@@ -45,7 +45,7 @@ export interface PropertySpecs {
 
 // ---- Inventory sections ---------------------------------------------------------
 
-export type InventoryKind = "utility" | "appliance" | "contact" | "key";
+export type InventoryKind = "utility" | "appliance" | "contact" | "key" | "note";
 
 export const UTILITY_TYPES = [
   "Electricity",
@@ -70,6 +70,13 @@ export const CONTACT_TYPES = [
   "Gardener",
   "Security Company",
   "Neighbor",
+] as const;
+
+/** Property Notes types — exact Airtable options. */
+export const NOTE_TYPES = [
+  "Instructions",
+  "Property Access",
+  "Problematic Area",
 ] as const;
 
 /**
@@ -142,6 +149,7 @@ export interface PassportExistingData {
   appliances: ExistingRecordSummary[];
   contacts: ExistingRecordSummary[];
   keys: ExistingRecordSummary[];
+  notes: ExistingRecordSummary[];
   baselinePhotoCount: number;
 }
 

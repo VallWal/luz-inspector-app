@@ -84,6 +84,7 @@ async function requestPassportData(
     appliances: records(data.appliances),
     contacts: records(data.contacts),
     keys: records(data.keys),
+    notes: records(data.notes),
     baselinePhotoCount:
       typeof data.baselinePhotoCount === "number" ? data.baselinePhotoCount : 0,
   };
