@@ -8,7 +8,7 @@ import {
   setLiveOpenFindings,
   type Property,
 } from "./data";
-import { fetchAppData } from "./lib/appData";
+import { fetchAppData, type AppData } from "./lib/appData";
 
 /** Safety fallback only — inspections can only start from a fetched property. */
 const UNKNOWN_PROPERTY: Property = {
@@ -101,16 +101,35 @@ export default function App() {
 
   const nowMs = () => new Date().getTime();
 
+  const applyAppData = (data: AppData) => {
+    setPropertyList(data.properties);
+    if (data.notes.length > 0) setLiveNotes(data.notes);
+    setLiveInspectionItems(data.inspectionItems);
+    setLiveOpenFindings(data.openFindings);
+    setItemsLoaded(data.inspectionItems.length > 0);
+  };
+
+  // Explicit refresh (Select Property screen) — bypasses the 15-min cache,
+  // e.g. right after creating a new property in Airtable.
+  const [refreshingProperties, setRefreshingProperties] = useState(false);
+  const refreshAppData = async () => {
+    if (refreshingProperties) return;
+    setRefreshingProperties(true);
+    try {
+      applyAppData(await fetchAppData({ fresh: true }));
+    } catch (err) {
+      console.error("App data refresh failed", err);
+    } finally {
+      setRefreshingProperties(false);
+    }
+  };
+
   // App data fetch + draft restore. The draft is only restored AFTER the
   // inspection items are loaded — the flow's zones are built from them.
   useEffect(() => {
     fetchAppData()
       .then(async (data) => {
-        setPropertyList(data.properties);
-        if (data.notes.length > 0) setLiveNotes(data.notes);
-        setLiveInspectionItems(data.inspectionItems);
-        setLiveOpenFindings(data.openFindings);
-        setItemsLoaded(data.inspectionItems.length > 0);
+        applyAppData(data);
         // Restore an interrupted inspection (reload, crash, phone lock).
         const draft = await loadDraft();
         if (draft && data.inspectionItems.length > 0) {
@@ -284,6 +303,8 @@ export default function App() {
           <SelectPropertyScreen
             properties={propertyList ?? []}
             propertiesLoading={propertyList === null}
+            onRefresh={refreshAppData}
+            refreshing={refreshingProperties}
             onBack={() => navigate({ name: "home" }, "back")}
             onSelect={(property) =>
               navigate(

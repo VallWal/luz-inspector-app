@@ -52,7 +52,13 @@ export default function SelectTypeScreen({
         <p className="mt-0.5 text-sm text-white/60">{property.address}</p>
       </section>
 
-      {/* Type list + Start — the actual decision comes first */}
+      {/* Briefing FIRST — the on-site sequence is: access the property
+          (Property Notes incl. codes/instructions), know what's open, THEN
+          choose the inspection type. */}
+      <PropertyNotes propertyId={property.id} />
+      <OpenFindings propertyId={property.id} />
+
+      {/* Type list + Start */}
       <main className="mx-5 mt-4 flex flex-col rounded-3xl bg-white px-6 py-6 shadow-sm">
         <div className="flex flex-col gap-2">
           {INSPECTION_TYPE_NAMES.map((name) => {
@@ -88,7 +94,7 @@ export default function SelectTypeScreen({
       </main>
 
       {/* Property Passport — a different activity with its own flow */}
-      <section className="mx-5 mt-3 rounded-3xl bg-white px-6 py-5 shadow-sm">
+      <section className="mx-5 mt-4 rounded-3xl bg-white px-6 py-5 shadow-sm">
         <p className="text-xs font-medium uppercase tracking-wider text-navy/50">
           Property Passport
         </p>
@@ -103,10 +109,6 @@ export default function SelectTypeScreen({
           📘 Open Passport Capture
         </button>
       </section>
-
-      {/* Property briefing — read before walking in */}
-      <OpenFindings propertyId={property.id} />
-      <PropertyNotes propertyId={property.id} />
 
       <div className="pb-7" />
     </div>

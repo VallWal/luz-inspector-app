@@ -8,6 +8,9 @@ interface Props {
   properties: Property[];
   /** True while the live property list is still being fetched. */
   propertiesLoading?: boolean;
+  /** Forces a fresh fetch past the cache — e.g. a property just created in Airtable. */
+  onRefresh?: () => void;
+  refreshing?: boolean;
   onBack: () => void;
   onSelect: (property: Property) => void;
 }
@@ -15,6 +18,8 @@ interface Props {
 export default function SelectPropertyScreen({
   properties,
   propertiesLoading = false,
+  onRefresh,
+  refreshing = false,
   onBack,
   onSelect,
 }: Props) {
@@ -42,15 +47,30 @@ export default function SelectPropertyScreen({
         </div>
       </header>
 
-      {/* Search */}
-      <div className="px-5 pt-3">
+      {/* Search + refresh */}
+      <div className="flex items-center gap-2 px-5 pt-3">
         <input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search property, code or address"
-          className="h-12 w-full rounded-2xl border-2 border-navy/10 bg-white px-4 text-sm text-navy placeholder:text-navy/40 focus:border-navy/40 focus:outline-none"
+          className="h-12 min-w-0 flex-1 rounded-2xl border-2 border-navy/10 bg-white px-4 text-sm text-navy placeholder:text-navy/40 focus:border-navy/40 focus:outline-none"
         />
+        {onRefresh && (
+          <button
+            onClick={onRefresh}
+            disabled={refreshing}
+            aria-label="Refresh property list"
+            className="flex size-12 shrink-0 items-center justify-center rounded-2xl border-2 border-navy/10 bg-white text-navy/60 transition-all active:scale-95 hover:border-navy/25 disabled:opacity-50"
+          >
+            <span
+              className={`text-lg leading-none ${refreshing ? "animate-spin" : ""}`}
+              aria-hidden
+            >
+              ↻
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Property list */}
